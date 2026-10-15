@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Matrice Intelix</title>
-<meta name="description" content="Matrice intelligente intermédiaire : contrôle, cumul et export sécurisé des saisies vers Intelix.">
+<meta name="description" content="Matrice intelligente &amp; nettoyeur de données : ingestion multi-formats, contrôle, cumul et export sécurisé vers Intelix.">
 <script>
   // Thème appliqué avant le rendu pour éviter le flash
   try {
@@ -26,6 +26,7 @@
   };
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
 <style>
   :root { color-scheme: light; }
@@ -53,8 +54,8 @@
     <div class="flex items-center gap-3 min-w-0">
       <div class="h-10 w-10 rounded-xl bg-indigo-600 text-white grid place-items-center shadow-sm shadow-indigo-600/30 text-xl"><i data-lucide="shield-check"></i></div>
       <div class="min-w-0">
-        <h1 class="font-semibold text-base sm:text-lg leading-tight truncate">Matrice Intelligente Intermédiaire</h1>
-        <p class="text-xs text-slate-500 dark:text-slate-400 truncate">Garde-fou &amp; pré-traitement des saisies Intelix</p>
+        <h1 class="font-semibold text-base sm:text-lg leading-tight truncate">Matrice Intelligente &amp; Nettoyeur de Données</h1>
+        <p class="text-xs text-slate-500 dark:text-slate-400 truncate">Garde-fou, parser universel &amp; pré-traitement Intelix</p>
       </div>
     </div>
     <div id="conformityBadge" class="order-last w-full lg:order-none lg:w-auto lg:ml-auto"></div>
@@ -73,16 +74,46 @@
     <section class="xl:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
       <div class="px-5 pt-5 pb-3 flex flex-wrap items-center gap-2">
         <span class="h-7 w-7 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 grid place-items-center text-sm font-bold">1</span>
-        <h2 class="font-semibold">Importation des fichiers source</h2>
+        <h2 class="font-semibold">Capture &amp; ingestion multi-formats</h2>
         <div id="sourceStatus" class="flex flex-wrap gap-2 ml-auto"></div>
       </div>
       <div class="px-5 pb-5 space-y-4">
-        <label id="dropzone" for="fileInput" class="block cursor-pointer rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/40 px-4 py-8 text-center transition hover:border-indigo-400">
-          <div class="mx-auto h-12 w-12 rounded-full bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 grid place-items-center text-2xl mb-3"><i data-lucide="upload-cloud"></i></div>
-          <p class="font-medium">Glissez-déposez vos fichiers ici <span class="text-slate-500 dark:text-slate-400 font-normal">ou cliquez pour parcourir</span></p>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Excel (.xlsx, .xls, .ods) ou CSV (; , tabulation) — Référentiel articles et/ou fichiers de commandes / cumuls</p>
-          <input id="fileInput" type="file" multiple accept=".xlsx,.xls,.xlsm,.ods,.csv,.txt,.tsv" class="sr-only">
-        </label>
+        <div class="grid gap-4 md:grid-cols-2">
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300 mb-1.5 flex items-center gap-1.5"><i data-lucide="book-open"></i>A · Fichier référence articles Intelix</div>
+            <label data-drop="ref" for="refInput" class="dropzone block cursor-pointer rounded-xl border-2 border-dashed border-sky-300/70 dark:border-sky-700/60 bg-sky-50/50 dark:bg-sky-950/20 px-4 py-6 text-center transition hover:border-sky-500">
+              <div class="mx-auto h-11 w-11 rounded-full bg-sky-100 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 grid place-items-center text-xl mb-2"><i data-lucide="database"></i></div>
+              <p class="font-medium text-sm">Déposez le référentiel produits <span class="text-slate-500 dark:text-slate-400 font-normal">ou cliquez</span></p>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Excel / CSV avec au moins une colonne « Code article »</p>
+              <input id="refInput" type="file" multiple accept=".xlsx,.xls,.xlsm,.ods,.csv,.txt,.tsv" class="sr-only">
+            </label>
+          </div>
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-1.5 flex items-center gap-1.5"><i data-lucide="inbox"></i>B · Sources à contrôler (tous formats)</div>
+            <label data-drop="source" for="srcInput" class="dropzone block cursor-pointer rounded-xl border-2 border-dashed border-violet-300/70 dark:border-violet-700/60 bg-violet-50/50 dark:bg-violet-950/20 px-4 py-6 text-center transition hover:border-violet-500">
+              <div class="mx-auto h-11 w-11 rounded-full bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 grid place-items-center text-xl mb-2"><i data-lucide="upload-cloud"></i></div>
+              <p class="font-medium text-sm">Déposez commandes, cumuls, exports… <span class="text-slate-500 dark:text-slate-400 font-normal">ou cliquez</span></p>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Excel, CSV, PDF (texte), TXT, notes — tableaux et brouillons détectés automatiquement</p>
+              <input id="srcInput" type="file" multiple accept=".xlsx,.xls,.xlsm,.ods,.csv,.txt,.tsv,.pdf,.md,.eml,.log" class="sr-only">
+            </label>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+          <div class="flex flex-wrap items-center gap-2 mb-2">
+            <span class="text-sm font-semibold flex items-center gap-2"><i data-lucide="clipboard-paste"></i>Coller un brouillon / e-mail / message</span>
+            <span class="text-xs text-slate-500 dark:text-slate-400">WhatsApp, notes, tableau copié d'Excel…</span>
+            <button id="btnPasteExample" class="ml-auto text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline">Insérer un exemple</button>
+          </div>
+          <textarea id="pasteBox" rows="6" spellcheck="false" placeholder="Exemples reconnus :&#10;81023 x 50&#10;ProdA - 12 unités&#10;100x Art45&#10;Commande CMD-4521 :&#10;[15/10 09:42] Karim: rajoute 3 désinfectant" class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <button id="btnParse" class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-semibold hover:bg-indigo-500"><i data-lucide="wand-sparkles"></i>Parser &amp; Structurer</button>
+            <span class="text-xs text-slate-500 dark:text-slate-400">Ctrl + Entrée</span>
+            <button id="btnPasteClear" class="ml-auto text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">Vider</button>
+          </div>
+          <div id="pasteResult" class="mt-2"></div>
+        </div>
+
         <div id="fileList" class="grid gap-3 md:grid-cols-2"></div>
       </div>
     </section>
@@ -216,6 +247,7 @@
             <option value="qty">Qté seule</option>
           </select>
         </div>
+        <button id="btnAssist" class="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-300 dark:border-indigo-500/40 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-4 py-2.5 font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-500/20"><i data-lucide="keyboard"></i>Mode saisie assistée Intelix (champ par champ)</button>
       </div>
     </div>
   </section>
@@ -238,6 +270,13 @@
 
   <p class="text-center text-xs text-slate-400 dark:text-slate-500 pb-4">Traitement 100 % local dans le navigateur — aucune donnée n'est envoyée sur un serveur. Session sauvegardée automatiquement sur ce poste.</p>
 </main>
+
+<!-- ============ MODE SAISIE ASSISTÉE ============ -->
+<div id="assist" hidden class="fixed inset-0 z-40 hidden bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="assistTitle">
+  <div class="min-h-full grid place-items-center">
+    <div id="assistBody" tabindex="-1" class="outline-none w-full max-w-xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl"></div>
+  </div>
+</div>
 
 <div id="toasts" class="fixed bottom-4 right-4 left-4 sm:left-auto z-50 flex flex-col gap-2 items-stretch sm:items-end pointer-events-none"></div>
 
@@ -283,7 +322,10 @@ const state = {
   log: [],
   settings: JSON.parse(JSON.stringify(DEFAULTS)),
   ui: { view: 'lines', filter: 'all', search: '', page: 1, pageSize: 50, errorsFirst: false },
-  validated: null     // {at, sig, articles, total}
+  validated: null,    // {at, sig, articles, total}
+  entered: {},        // code -> quantité confirmée saisie dans Intelix (mode assisté)
+  assist: { open: false, idx: 0, autoCopy: true },
+  draftSeq: 0
 };
 let A = { issues: new Map(), cumuls: new Map(), stats: {} };   // résultat de l'analyse
 let seq = Date.now();
@@ -318,6 +360,18 @@ function parseNum(v) {
   } else s = s.replace(',', '.');
   if (!/^[-+]?\d*\.?\d+$/.test(s)) return NaN;
   return Number(s);
+}
+
+// Nettoyage tolérant d'une quantité : unités, préfixes « x », confusions lettre/chiffre (O→0, l/I→1)
+const UNIT_RX = '(?:unit[eé]s?|u|pcs?|pi[eè]ces?|bo[iî]tes?|btes?|cartons?|colis|ex|exemplaires?|rouleaux?|rlx|sacs?|sachets?|ramettes?|lots?|paquets?|bidons?|flacons?|bouteilles?|palettes?|cartouches?|kg)';
+function cleanQtyEx(raw) {
+  if (typeof raw === 'number') return { v: Number.isFinite(raw) ? raw : NaN, sub: false };
+  let s = String(raw ?? '').trim();
+  if (!s) return { v: null, sub: false };
+  s = s.replace(/^(?:x|×|qt[eé]s?|quantit[eé]s?)\s*[:=]?\s*/i, '').replace(new RegExp(`\\s*${UNIT_RX}\\.?$`, 'i'), '').trim();
+  let sub = false;
+  if (/\d/.test(s) && /[oOlI|]/.test(s) && /^[\d\s.,oOlI|]+$/.test(s)) { s = s.replace(/[oO]/g, '0').replace(/[lI|]/g, '1'); sub = true; }
+  return { v: parseNum(s), sub };
 }
 
 function cellToString(v) {
@@ -399,9 +453,11 @@ function save() {
   saveTimer = setTimeout(() => {
     const base = {
       v: 1, settings: state.settings, lines: state.lines, forced: [...state.forced], log: state.log,
-      validated: state.validated, ui: { view: state.ui.view, pageSize: state.ui.pageSize, errorsFirst: state.ui.errorsFirst }
+      validated: state.validated, entered: state.entered, draftSeq: state.draftSeq, autoCopy: state.assist.autoCopy,
+      ui: { view: state.ui.view, pageSize: state.ui.pageSize, errorsFirst: state.ui.errorsFirst }
     };
     const files = withRows => state.files.map(f => ({
+      kind: f.kind, label: f.label, text: f.text, unparsed: f.unparsed, skipped: f.skipped,
       id: f.id, name: f.name, role: f.role, sheet: f.sheet, headerRow: f.headerRow, headers: f.headers,
       mapping: f.mapping, count: f.count, importedAt: f.importedAt, refEntries: f.refEntries || [],
       rows: withRows && f.sheets ? f.sheets[f.sheet] : null
@@ -425,6 +481,9 @@ function load() {
   state.forced = new Set(data.forced || []);
   state.log = data.log || [];
   state.validated = data.validated || null;
+  state.entered = data.entered || {};
+  state.draftSeq = data.draftSeq || 0;
+  if (data.autoCopy === false) state.assist.autoCopy = false;
   Object.assign(state.ui, data.ui || {});
   state.files = (data.files || []).map(f => ({ ...f, sheets: f.rows ? { [f.sheet]: f.rows } : null, sheetNames: [f.sheet] }));
   state.files.forEach(f => delete f.rows);
@@ -469,10 +528,53 @@ function parseCSV(text) {
   return rows.filter(r => r.some(c => String(c).trim() !== ''));
 }
 
-async function readFile(file) {
+async function pdfToText(buf) {
+  if (!window.pdfjsLib) throw new Error('le lecteur PDF (pdf.js) n\'a pas pu être chargé');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  const out = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const tc = await (await pdf.getPage(p)).getTextContent();
+    const rows = [];
+    for (const it of tc.items) {
+      if (!it.str || !it.str.trim()) continue;
+      const y = it.transform[5], x = it.transform[4];
+      let row = rows.find(r => Math.abs(r.y - y) <= 3);
+      if (!row) rows.push(row = { y, items: [] });
+      row.items.push({ x, str: it.str, w: it.width || 0 });
+    }
+    rows.sort((a, b) => b.y - a.y);
+    for (const r of rows) {
+      r.items.sort((a, b) => a.x - b.x);
+      let line = '', end = null;
+      for (const it of r.items) { if (end !== null) { const gap = it.x - end; line += gap > 12 ? '\t' : gap > 1.5 ? ' ' : ''; } line += it.str; end = it.x + it.w; }
+      out.push(line);
+    }
+  }
+  const text = out.join('\n');
+  if (!text.replace(/\s/g, '')) throw new Error('PDF sans texte exploitable (document scanné ?) — la reconnaissance d\'image n\'est pas prise en charge');
+  return text;
+}
+
+// Lit un fichier : {kind:'table', sheets} ou {kind:'text', text}
+async function readAny(file) {
   const buf = await file.arrayBuffer();
   const ext = (file.name.split('.').pop() || '').toLowerCase();
-  if (['csv', 'txt', 'tsv'].includes(ext)) return { 'CSV': parseCSV(decodeText(buf)) };
+  if (ext === 'pdf') {
+    const text = await pdfToText(buf), rows = textToTable(text);
+    return rows ? { kind: 'table', sheets: { PDF: rows } } : { kind: 'text', text };
+  }
+  if (['txt', 'md', 'eml', 'log'].includes(ext)) {
+    const text = decodeText(buf), rows = textToTable(text);
+    return rows ? { kind: 'table', sheets: { Texte: rows } } : { kind: 'text', text };
+  }
+  return { kind: 'table', sheets: await readFile(file, buf) };
+}
+
+async function readFile(file, buf) {
+  buf = buf || await file.arrayBuffer();
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (['csv', 'tsv'].includes(ext)) return { 'CSV': parseCSV(decodeText(buf)) };
   if (!window.XLSX) throw new Error('la bibliothèque Excel (SheetJS) n\'a pas pu être chargée. Vérifiez la connexion ou utilisez un fichier CSV.');
   const wb = XLSX.read(buf, { type: 'array', cellDates: true });
   const sheets = {};
@@ -546,12 +648,12 @@ function guessRole(f) {
   return 'ref';
 }
 
-function addFile(name, sheets) {
+function addFile(name, sheets, forcedRole) {
   const names = Object.keys(sheets);
   const sheet = names.find(n => (sheets[n] || []).length > 1) || names[0];
   const f = { id: uid('F'), name, sheets, sheetNames: names, sheet, importedAt: new Date().toISOString() };
   configureFile(f);
-  f.role = guessRole(f);
+  f.role = forcedRole || guessRole(f);
   if (f.role === 'orders' && f.mapping.qty == null && f.qtyGuess != null) f.mapping.qty = f.qtyGuess;
   state.files.push(f);
   syncFile(f);
@@ -562,6 +664,12 @@ function addFile(name, sheets) {
 // (Ré)extrait les données d'un fichier selon son rôle et son mappage
 function syncFile(f) {
   state.lines = state.lines.filter(l => l.fileId !== f.id);
+  if (f.kind === 'draft') {
+    const r = parseDraft(f.text || '', f.id, f.label);
+    state.lines.push(...r.lines);
+    f.count = r.lines.length; f.unparsed = r.unparsed; f.skipped = r.skipped;
+    return;
+  }
   if (!f.sheets) { rebuildRef(); return; }
   const rows = f.sheets[f.sheet] || [], m = f.mapping;
   const get = (r, k) => (m[k] != null ? r[m[k]] : '');
@@ -596,7 +704,7 @@ function syncFile(f) {
 }
 
 function rebuildRef() {
-  state.ref = new Map(); sugCache.clear();
+  state.ref = new Map(); sugCache.clear(); desigCache.clear();
   const dupes = [];
   state.files.filter(f => f.role === 'ref').forEach(f => (f.refEntries || []).forEach(e => {
     if (state.ref.has(e.code)) dupes.push(e.code); else state.ref.set(e.code, e);
@@ -635,6 +743,157 @@ function suggest(code) {
   return best;
 }
 
+// Recherche d'un article par sa désignation (score 0..1, alternatives proches)
+const desigCache = new Map();
+function designationMatch(text) {
+  const q = normText(text);
+  if (!q || q.length < 3 || !state.ref.size) return null;
+  if (desigCache.has(q)) return desigCache.get(q);
+  const STOP = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'd', 'l', 'x', 'et', 'pour', 'a', 'au', 'en', 'un', 'une']);
+  const qt = q.split(' ').filter(t => t && !STOP.has(t) && !/^\d+$/.test(t));
+  if (!qt.length) { desigCache.set(q, null); return null; }
+  const scored = [];
+  for (const e of state.ref.values()) {
+    const d = normText(e.designation); if (!d) continue;
+    const dt = d.split(' ');
+    const hit = qt.filter(x => dt.some(y => y === x || (x.length >= 3 && (y.startsWith(x) || x.startsWith(y) && y.length >= 4)))).length;
+    const frac = hit / qt.length, cover = hit / dt.length;
+    const score = 0.55 * frac + 0.2 * cover + 0.25 * similarity(q, d);
+    if (hit) scored.push({ code: e.code, designation: e.designation, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const res = scored.length ? { ...scored[0], alts: scored.slice(1, 4).filter(s => s.score >= scored[0].score - 0.06) } : null;
+  desigCache.set(q, res);
+  return res;
+}
+
+/* ---------------------------- Nettoyeur de brouillons ---------------------------- */
+const NUM_RX = '(\\d[\\dOoIl]*(?:[.,]\\d+)?)';
+
+function splitSegments(text) {
+  const out = [];
+  text.replace(/\r/g, '').split('\n').forEach((line, li) => {
+    line = line.replace(/^\s*>+\s?/, '')                                                              // citation e-mail
+      .replace(/^\s*\[?\d{1,2}[\/.]\d{1,2}(?:[\/.]\d{2,4})?,?\s+\d{1,2}:\d{2}(?::\d{2})?\]?\s*(?:-\s*)?[^:\d]{1,40}:\s*/, '') // WhatsApp
+      .replace(/^\s*(?:[-*•·▪►–—✓✔]|\d{1,2}[).])\s+/, '');                                          // puces / numérotation
+    line.split(/\s*(?:;|\||,(?!\d)|\s\+\s|\s\/\s)\s*/).forEach(seg => { if (seg.trim()) out.push({ seg: seg.trim(), line: li + 1 }); });
+  });
+  // fusion « Réf : X » + « Qté : Y » sur deux segments consécutifs
+  const merged = [];
+  for (let i = 0; i < out.length; i++) {
+    const a = out[i].seg.match(/^(?:r[ée]f(?:[ée]rence)?|code|article|art)\s*[:#.-]?\s*(\S+)$/i);
+    const b = out[i + 1] && out[i + 1].seg.match(new RegExp(`^(?:qt[eé]s?|quantit[eé]s?)\\s*[:=]?\\s*${NUM_RX}\\s*${UNIT_RX}?\\.?$`, 'i'));
+    if (a && b) { merged.push({ seg: `${a[1]} x ${b[1]}`, line: out[i].line, raw: `${out[i].seg} / ${out[i + 1].seg}` }); i++; }
+    else merged.push(out[i]);
+  }
+  return merged;
+}
+
+function cleanItem(t) {
+  return String(t || '')
+    .replace(/^(?:de|d'|du|des|of)\s+/i, '')
+    .replace(/^(?:r[ée]f(?:[ée]rence)?|article|art|code|n°|no|#)(?:\s*[:.#-]\s*|\s+)/i, '')
+    .replace(/[\s:=>–—\-x×*]+$/i, '').replace(/^[\s:=>–—\-]+/, '').trim();
+}
+
+function resolveItem(t) {
+  const ref = state.ref, c = normCode(t);
+  if (ref.has(c)) return { how: 'code', code: c };
+  const toks = (t.match(/[A-Za-z0-9][A-Za-z0-9._\/-]*/g) || []).map(normCode);
+  for (const k of toks) if (ref.has(k)) return { how: 'code', code: k };
+  for (const k of toks) { const m = k.match(/^[A-Z]+[-_.]?(\d[\dA-Z]*)$/); if (m && ref.has(m[1])) return { how: 'prefix', code: m[1] }; }
+  if (ref.size && /[a-zà-ÿ]{3,}/i.test(t)) {
+    const d = designationMatch(t);
+    if (d && d.score >= 0.6) return { how: 'desig', code: d.code, score: d.score, alts: d.alts.map(a => a.code) };
+  }
+  const codeTok = toks.find(k => /\d/.test(k) && /^[A-Z0-9._\/-]+$/.test(k) && (k.length >= 3 || /^\d+$/.test(k)));
+  if (codeTok) return { how: ref.size && suggest(codeTok) ? 'sugg' : 'none', code: codeTok };
+  return { how: 'none', code: /\s/.test(t.trim()) || !ref.size && /^[a-zà-ÿ ]+$/i.test(t) ? '' : c };
+}
+
+const HOW_SCORE = { code: 6, prefix: 5, desig: 4, sugg: 2, none: 0 };
+function interpretSegment(seg) {
+  const s = seg.replace(/\s+/g, ' ').replace(/[.!?]+$/, '').trim();
+  if (!/\d/.test(s)) return null;
+  const N = NUM_RX, U = `(?:\\s*${UNIT_RX}\\b\\.?)?`;
+  const variants = [[s, 0]];
+  const stripped = s.replace(/^(?:[a-zà-ÿ']+\s+){1,3}(?=\d)/i, '');            // « rajoute 3 désinfectant »
+  if (stripped !== s) variants.push([stripped, -0.25]);
+  const rules = [
+    [`^${N}${U}\\s*(?:x|×|\\*|fois)\\s*(.+)$`, 1, 2, 0.5],                       // 100x Art45
+    [`^(.+?)\\s*(?:x|×|\\*)\\s*${N}${U}$`, 2, 1, 0.6],                             // 81023 x 50 (prioritaire à égalité)
+    [`^(.+?)\\s*(?:[:=>–—-]+|\\bqt[eé]s?\\b\\s*:?|\\bquantit[eé]s?\\b\\s*:?)\\s*${N}${U}$`, 2, 1, 0.5], // ProdA - 12 unités
+    [`^(.+?)\\s*[:=>–—-]+\\s*${N}\\s+[a-zà-ÿ]{2,14}\\.?$`, 2, 1, 0.25],          // Écrou - 3 sachets (unité libre)
+    [`^${N}\\s*${UNIT_RX}\\b\\.?\\s*(?:de |d'|du |des )?(.+)$`, 1, 2, 0.5],       // 12 unités de ProdA
+    [`^(.+?)\\s+${N}${U}$`, 2, 1, 0],                                               // Papier A4 40
+    [`^${N}\\s+(.+)$`, 1, 2, 0]                                                     // 40 papier A4
+  ];
+  const cands = [];
+  for (const [text, bonus] of variants) for (const [rx, qi, ii, b] of rules) {
+    const m = text.match(new RegExp(rx, 'i')); if (!m) continue;
+    const q = cleanQtyEx(m[qi]); if (!Number.isFinite(q.v) || q.v <= 0) continue;
+    const item = cleanItem(m[ii]); if (!item || !/[A-Za-z0-9]/.test(item)) continue;
+    const res = resolveItem(item);
+    let score = HOW_SCORE[res.how] + b + bonus;
+    if (/^\d{1,2}$/.test(item)) score -= 2;                                        // l'« article » ressemble à une quantité
+    if (q.v >= 10000 && /^\d+$/.test(m[qi])) score -= 2;                           // la « quantité » ressemble à un code
+    cands.push({ qtyRaw: m[qi], qty: q.v, sub: q.sub, item, res, score });
+  }
+  if (!cands.length) return null;
+  cands.sort((a, b) => b.score - a.score);
+  const best = cands[0];
+  const alt = cands.find(c => c.res.code !== best.res.code && c.qty !== best.qty && c.res.code &&
+    (best.score - c.score < 1 || (/^\d{3,}$/.test(best.item) && /^\d{3,}$/.test(c.item) && best.res.how === 'none')));
+  return { ...best, alt: alt ? { code: alt.res.code, qty: alt.qty, qtyRaw: alt.qtyRaw } : null };
+}
+
+const PIECE_RX = /^(?:commande|cde|bon de commande|bc|n°\s*commande|r[ée]f(?:[ée]rence)?\s+commande)\s*(?:n°|no|#|:)?\s*([A-Z0-9][\w\/-]{2,})\s*:?$/i;
+const SKIP_RX = [/(?:\+33\s?|\b0)[1-9](?:[ .-]?\d{2}){4}\b/, /[\w.-]+@[\w.-]+\.\w+/, /https?:\/\//i, /^(?:de|à|a|objet|envoy[ée]|cc|cci|date|from|to|subject|sent|t[ée]l|fax)\s*:/i, /^\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4}$/, /^\d{1,2}[:h]\d{2}$/];
+
+// Parse un texte libre -> {lines, unparsed, skipped}
+function parseDraft(text, fileId, label) {
+  const lines = [], unparsed = []; let skipped = 0, piece = '';
+  for (const { seg, line, raw } of splitSegments(text)) {
+    const pm = seg.match(PIECE_RX);
+    if (pm) { piece = pm[1].toUpperCase(); continue; }
+    if (!/\d/.test(seg) || SKIP_RX.some(rx => rx.test(seg))) { skipped++; continue; }
+    const r = interpretSegment(seg);
+    if (!r) { unparsed.push({ seg: raw || seg, line }); continue; }
+    const byText = r.res.how === 'desig' || (r.res.how === 'none' && !r.res.code);
+    lines.push({
+      id: uid('L'), fileId, src: `${label} · l.${line}`, raw: raw || seg,
+      code: r.res.code, designation: byText || r.res.how === 'sugg' || r.res.how === 'none' ? r.item : '',
+      qtyRaw: String(r.qtyRaw), qty: r.qty, qtySub: r.sub, unit: '', piece,
+      how: r.res.how, matchScore: r.res.score, alts: r.res.alts, alt: r.alt, ack: {}, edited: false
+    });
+  }
+  return { lines, unparsed, skipped };
+}
+
+function addDraft(name, text, kind = 'draft') {
+  const label = kind === 'paste' ? `Brouillon ${++state.draftSeq}` : (name.length > 22 ? name.slice(0, 20) + '…' : name);
+  const f = { id: uid('F'), name: kind === 'paste' ? `${label} (collé)` : name, kind: 'draft', label, text, role: 'orders', headers: [], mapping: {}, importedAt: new Date().toISOString() };
+  state.files.push(f);
+  syncFile(f);
+  log('info', `${kind === 'paste' ? 'Brouillon collé' : `Fichier texte « ${name} »`} analysé : ${f.count} ligne(s) structurée(s)${f.unparsed.length ? `, ${f.unparsed.length} segment(s) non interprété(s)` : ''}${f.skipped ? `, ${f.skipped} ligne(s) de texte ignorée(s)` : ''}.`);
+  return f;
+}
+
+// Texte -> tableau exploitable ? (en-têtes reconnus) sinon brouillon
+function textToTable(text) {
+  const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim());
+  if (lines.length < 2) return null;
+  const tabbed = lines.filter(l => l.includes('\t')).length >= lines.length * 0.6;
+  const rows = tabbed ? lines.map(l => l.split('\t').map(c => c.trim())) : parseCSV(text);
+  if (!rows.length || Math.max(...rows.map(r => r.length)) < 2) return null;
+  for (let i = 0; i < Math.min(10, rows.length); i++) {
+    const r = rows[i];
+    const hasCode = r.some(c => headerScore(c, 'code') >= 2), hasQty = r.some(c => headerScore(c, 'qty') >= 2 || headerScore(c, 'designation') >= 2);
+    if (hasCode && hasQty) return rows;
+  }
+  return null;
+}
+
 /* ---------------------------- Moteur d'analyse ---------------------------- */
 function analyze() {
   const S = state.settings, ref = state.ref, hasRef = ref.size > 0;
@@ -644,22 +903,42 @@ function analyze() {
 
   for (const l of state.lines) {
     // 1. Référence
-    if (!l.code) add(l, { type: 'code', sev: 'error', msg: 'Code article manquant : saisissez la référence Intelix de cette ligne.' });
+    const dm = (!l.code || (hasRef && !ref.has(l.code))) && l.designation ? designationMatch(l.designation) : null;
+    const desFixes = dm && dm.score >= 0.45 ? [dm, ...dm.alts].slice(0, 3).map(d => ({ code: d.code, label: `${d.code} – ${d.designation}` })) : [];
+    if (!l.code) add(l, {
+      type: 'code', sev: 'error', fixes: desFixes,
+      msg: `Code article manquant${l.designation ? ` pour « ${l.designation} »` : ''} : ` + (desFixes.length ? 'article(s) du référentiel correspondant à la désignation proposé(s) ci-dessous.' : 'saisissez la référence Intelix de cette ligne.')
+    });
     else if (hasRef && !ref.has(l.code)) {
       const s = suggest(l.code);
+      const fixes = s ? [{ code: s.code, label: `Remplacer par ${s.code}`, auto: true }] : desFixes;
       add(l, {
-        type: 'unknown', sev: 'error',
-        msg: `Référence « ${l.code} » absente du fichier de référence.` + (s ? ` Vouliez-vous dire ${s.code} – ${ref.get(s.code).designation || 'sans désignation'} ? (${s.reason})` : ' Vérifiez la saisie ou complétez le référentiel.'),
-        fix: s ? { code: s.code } : null
+        type: 'unknown', sev: 'error', fixes,
+        msg: `Référence « ${l.code} » absente du fichier de référence.` + (s ? ` Vouliez-vous dire ${s.code} – ${ref.get(s.code).designation || 'sans désignation'} ? (${s.reason})` : desFixes.length ? ` Article(s) proche(s) par la désignation « ${l.designation} » :` : ' Vérifiez la saisie ou complétez le référentiel.')
       });
     }
+    // Article reconnu par sa désignation (brouillon) : confirmation demandée
+    if (l.how === 'desig' && l.code && ref.has(l.code)) {
+      const alts = (l.alts || []).filter(c => ref.has(c));
+      add(l, {
+        type: 'match', sev: 'warn', ack: 'match', fixes: alts.map(c => ({ code: c, label: `${c} – ${ref.get(c).designation}` })),
+        msg: `Article identifié par la désignation « ${l.designation} » → ${l.code} – ${ref.get(l.code).designation} (confiance ${Math.round((l.matchScore || 0) * 100)} %).` + (alts.length ? ' Autre(s) possibilité(s) :' : ' Vérifiez avant transfert.')
+      });
+    }
+    // Interprétation ambiguë du brouillon (inversion code / quantité possible)
+    if (l.alt) add(l, { type: 'parse', sev: 'warn', ack: 'parse', swap: l.alt, msg: `Interprétation incertaine de « ${l.raw} » : code ${l.code || '∅'}, quantité ${fmt(l.qty)}. Inversion code/quantité possible (code ${l.alt.code}, quantité ${fmt(l.alt.qty)}).` });
     // 2. Quantité
     if (l.qty === null) add(l, { type: 'qty', sev: 'error', msg: 'Quantité manquante : indiquez la quantité à saisir dans Intelix.' });
-    else if (Number.isNaN(l.qty)) add(l, { type: 'qty', sev: 'error', msg: `Quantité non numérique (« ${l.qtyRaw} ») : vérifiez la présence d'une lettre (O/0, l/1) ou d'un caractère parasite.` });
+    else if (Number.isNaN(l.qty)) {
+      const c = cleanQtyEx(l.qtyRaw);
+      const ok = Number.isFinite(c.v) && c.v > 0;
+      add(l, { type: 'qty', sev: 'error', qtyFix: ok ? c.v : null, msg: `Quantité non numérique (« ${l.qtyRaw} »)` + (ok ? ` : correction proposée ${fmt(c.v)}${c.sub ? ' (lettre O/l confondue avec un chiffre)' : ' (unité ou caractère parasite retiré)'}.` : ' : vérifiez la présence d\'une lettre ou d\'un caractère parasite.') });
+    }
+    else if (l.qtySub) add(l, { type: 'qtysub', sev: 'warn', ack: 'qtysub', msg: `Quantité « ${l.qtyRaw} » corrigée automatiquement en ${fmt(l.qty)} (confusion lettre/chiffre) : vérifiez.` });
     else if (l.qty <= 0) add(l, { type: 'qty', sev: 'error', msg: `Quantité ${l.qty < 0 ? 'négative' : 'nulle'} (${fmt(l.qty)}) : une saisie Intelix exige une quantité strictement positive.` });
     else if (S.lineMax > 0 && l.qty > S.lineMax) add(l, { type: 'linemax', sev: 'warn', ack: 'linemax', msg: `Quantité ${fmt(l.qty)} supérieure au maximum autorisé par ligne (${fmt(S.lineMax)}).` });
     // 3. Désignation incohérente (mauvais article sélectionné)
-    if (S.desigCheck && l.code && ref.has(l.code) && l.designation) {
+    if (S.desigCheck && l.code && ref.has(l.code) && l.designation && l.how !== 'desig') {
       const rd = ref.get(l.code).designation;
       if (rd && similarity(l.designation, rd) < 0.45)
         add(l, { type: 'desig', sev: 'warn', ack: 'desig', msg: `Désignation saisie « ${l.designation} » ≠ référentiel « ${rd} » pour le code ${l.code} : mauvais article sélectionné ?` });
@@ -691,7 +970,7 @@ function analyze() {
   const cumuls = new Map();
   for (const [code, ls] of byCode) {
     const r = ref.get(code);
-    const total = ls.reduce((s, l) => s + l.qty, 0);
+    const total = +ls.reduce((s, l) => s + l.qty, 0).toFixed(6);
     const refSeuil = r && Number.isFinite(r.seuil) && r.seuil > 0 ? r.seuil : null;
     const seuil = refSeuil ?? (S.seuil > 0 ? S.seuil : null);
     const pct = seuil ? (total / seuil) * 100 : 0;
@@ -762,8 +1041,11 @@ function renderAll() {
   analyze();
   renderConformity(); renderSources(); renderFiles(); renderKpis(); renderTodo();
   renderToolbar(); renderTable(); renderExport();
+  renderPasteResult(state.files.find(f => f.id === lastPasteId));
+  if (state.assist.open) renderAssist();
   icons(); save();
 }
+let lastPasteId = null;
 
 function renderConformity() {
   const s = A.stats; let cls, icon, title, sub;
@@ -794,6 +1076,7 @@ function renderFiles() {
     return;
   }
   box.innerHTML = state.files.map(f => {
+    if (f.kind === 'draft') return draftCard(f);
     const st = fileStatus(f);
     const fields = ROLE_FIELDS[f.role] || [];
     const canEdit = !!f.sheets;
@@ -829,6 +1112,52 @@ function renderFiles() {
   if (state.refDupes?.length) box.innerHTML += `<div class="md:col-span-2 text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2"><i data-lucide="alert-triangle"></i>${state.refDupes.length} code(s) en double dans le référentiel (1re occurrence retenue) : ${esc(state.refDupes.slice(0, 8).join(', '))}${state.refDupes.length > 8 ? '…' : ''}</div>`;
 }
 
+function unparsedList(f, max = 6) {
+  if (!f.unparsed?.length) return '';
+  return `<div class="mt-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-2">
+    <div class="text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5"><i data-lucide="alert-triangle"></i>${f.unparsed.length} segment(s) non interprété(s) — à vérifier</div>
+    <ul class="mt-1 space-y-1">${f.unparsed.slice(0, max).map((u, i) => `<li class="flex items-center gap-2 text-xs"><span class="font-mono text-slate-500">l.${u.line}</span><span class="flex-1 truncate font-mono" title="${esc(u.seg)}">${esc(u.seg)}</span>
+      <button data-act="addseg" data-file="${f.id}" data-idx="${i}" class="whitespace-nowrap font-medium text-indigo-600 dark:text-indigo-400 hover:underline">Ajouter comme ligne</button></li>`).join('')}</ul>
+    ${f.unparsed.length > max ? `<div class="text-[11px] text-slate-500 mt-1">… et ${f.unparsed.length - max} autre(s)</div>` : ''}</div>`;
+}
+
+function draftCard(f) {
+  const ok = f.count > 0;
+  return `<div class="rounded-xl border ${ok ? 'border-slate-200 dark:border-slate-800' : 'border-red-300 dark:border-red-500/40'} p-3">
+    <div class="flex items-start gap-3">
+      <div class="h-9 w-9 shrink-0 rounded-lg grid place-items-center text-lg bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-500/15 dark:text-fuchsia-300"><i data-lucide="sticky-note"></i></div>
+      <div class="min-w-0 flex-1">
+        <div class="font-medium text-sm truncate" title="${esc(f.name)}">${esc(f.name)}</div>
+        <div class="mt-1 flex flex-wrap items-center gap-2">
+          ${badge(ok ? 'ok' : 'error', ok ? 'Brouillon structuré' : 'Aucune ligne reconnue', ok ? 'check' : 'x')}
+          <span class="text-xs text-slate-500 dark:text-slate-400 num">${fmt(f.count || 0)} ligne(s)${f.skipped ? ` · ${f.skipped} ligne(s) de texte ignorée(s)` : ''}</span>
+        </div>
+      </div>
+      <button data-reparse="${f.id}" class="p-1.5 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10" title="Ré-analyser avec le référentiel actuel"><i data-lucide="refresh-cw"></i></button>
+      <button data-remove-file="${f.id}" class="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10" title="Retirer ce brouillon"><i data-lucide="trash-2"></i></button>
+    </div>
+    <details class="mt-2"><summary class="cursor-pointer text-xs text-indigo-600 dark:text-indigo-400 select-none">Texte source</summary>
+      <pre class="mt-1 max-h-40 overflow-auto scroll-thin rounded-md bg-slate-50 dark:bg-slate-950 p-2 text-[11px] whitespace-pre-wrap">${esc((f.text || '').slice(0, 5000))}</pre></details>
+    ${unparsedList(f, 3)}
+  </div>`;
+}
+
+function renderPasteResult(f) {
+  const box = $('#pasteResult');
+  if (!f) { box.innerHTML = ''; return; }
+  if (f.kind !== 'draft') { box.innerHTML = `<div class="text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5"><i data-lucide="table"></i>Tableau détecté (en-têtes reconnus) : ${f.count} ligne(s) importée(s) comme « ${esc(f.name)} ».</div>`; icons(); return; }
+  const ls = state.lines.filter(l => l.fileId === f.id);
+  const byDes = ls.filter(l => l.how === 'desig').length, unk = ls.filter(l => !l.code || (state.ref.size && !state.ref.has(l.code))).length;
+  box.innerHTML = `<div class="text-xs flex flex-wrap items-center gap-2">
+      ${badge(f.count ? 'ok' : 'error', `${f.count} ligne(s) structurée(s)`, f.count ? 'check' : 'x')}
+      ${byDes ? badge('warn', `${byDes} reconnue(s) par désignation`, 'search') : ''}
+      ${unk ? badge('error', `${unk} code(s) non reconnu(s)`, 'x') : ''}
+      ${f.skipped ? badge('info', `${f.skipped} ligne(s) de texte ignorée(s)`) : ''}
+      <button data-goto="${esc(f.label)}" data-goto-view="lines" class="font-medium text-indigo-600 dark:text-indigo-400 hover:underline">Voir dans le tableau</button>
+    </div>${unparsedList(f)}`;
+  icons();
+}
+
 function renderKpis() {
   const s = A.stats;
   const tile = (icon, label, value, tone, hint) => `<div class="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
@@ -854,7 +1183,7 @@ function renderTodo() {
   const box = $('#todo');
   const open = collectOpenIssues();
   if (!state.lines.length || !open.length) { box.innerHTML = ''; return; }
-  const fixes = open.filter(o => o.i.type === 'unknown' && o.i.fix).length;
+  const fixes = open.filter(o => (o.i.type === 'unknown' && o.i.fixes?.[0]?.auto) || o.i.qtyFix != null).length;
   const dups = open.filter(o => o.i.type === 'dup').length;
   const top = open.slice(0, 6);
   box.innerHTML = `<div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 p-3">
@@ -862,7 +1191,7 @@ function renderTodo() {
       <span class="font-semibold text-sm flex items-center gap-2"><i data-lucide="list-checks"></i>À traiter en priorité</span>
       <span class="text-xs text-slate-500 dark:text-slate-400">${open.length} anomalie(s) ouverte(s)</span>
       <div class="ml-auto flex flex-wrap gap-2">
-        ${fixes ? `<button data-bulk="fixes" class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-indigo-500"><i data-lucide="wand-2"></i>Appliquer les ${fixes} suggestion(s) de référence</button>` : ''}
+        ${fixes ? `<button data-bulk="fixes" class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-indigo-500"><i data-lucide="wand-2"></i>Appliquer les ${fixes} correction(s) automatique(s)</button>` : ''}
         ${dups ? `<button data-bulk="dups" class="inline-flex items-center gap-1.5 rounded-lg border border-red-300 text-red-700 dark:border-red-500/40 dark:text-red-300 px-3 py-1.5 text-xs font-semibold hover:bg-red-50 dark:hover:bg-red-500/10"><i data-lucide="copy-x"></i>Supprimer les ${dups} doublon(s)</button>` : ''}
       </div>
     </div>
@@ -966,7 +1295,9 @@ function issueList(iss, l) {
     const btn = 'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset';
     let actions = '';
     if (!i.acked) {
-      if (i.fix) actions += `<button data-act="fix" data-id="${l.id}" data-code="${esc(i.fix.code)}" class="${btn} bg-indigo-600 text-white ring-indigo-600 hover:bg-indigo-500"><i data-lucide="wand-2"></i>Remplacer par ${esc(i.fix.code)}</button>`;
+      (i.fixes || []).forEach((fx, n) => { actions += `<button data-act="fix" data-id="${l.id}" data-code="${esc(fx.code)}" class="${btn} ${n === 0 && i.type !== 'match' ? 'bg-indigo-600 text-white ring-indigo-600 hover:bg-indigo-500' : 'ring-indigo-300 dark:ring-indigo-500/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-500/10'}"><i data-lucide="wand-2"></i>${esc(fx.label)}</button>`; });
+      if (i.qtyFix != null) actions += `<button data-act="qtyfix" data-id="${l.id}" data-val="${i.qtyFix}" class="${btn} bg-indigo-600 text-white ring-indigo-600 hover:bg-indigo-500"><i data-lucide="wand-2"></i>Corriger en ${esc(fmt(i.qtyFix))}</button>`;
+      if (i.swap) actions += `<button data-act="swap" data-id="${l.id}" class="${btn} ring-indigo-300 dark:ring-indigo-500/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"><i data-lucide="arrow-left-right"></i>Inverser code / quantité</button>`;
       if (i.type === 'dup') actions += `<button data-act="del" data-id="${l.id}" class="${btn} ring-red-300 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/10"><i data-lucide="trash-2"></i>Supprimer ce doublon</button>`;
       if (i.ack) actions += `<button data-act="ack" data-id="${l.id}" data-type="${i.ack}" class="${btn} ring-slate-300 dark:ring-slate-600 hover:bg-white dark:hover:bg-slate-800"><i data-lucide="check"></i>${i.type === 'dup' ? 'Saisie distincte, conserver' : 'Vérifié, conserver'}</button>`;
       if (i.type === 'seuil') actions += `<button data-act="force" data-code="${esc(i.code)}" class="${btn} ring-slate-300 dark:ring-slate-600 hover:bg-white dark:hover:bg-slate-800"><i data-lucide="lock-open"></i>Forcer le dépassement</button>`;
@@ -990,7 +1321,7 @@ function lineRows(l) {
   return `<tbody class="border-t border-slate-200 dark:border-slate-800 ${ROW_BG[l._state]}" data-row="${l.id}">
     <tr>
       <td class="px-3 py-2 align-top pt-3">${STATE_ICON[l._state]}</td>
-      <td class="px-3 py-2 align-top"><div class="font-mono text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(l.src)}${l.edited ? ' <span class="text-indigo-500" title="Modifiée manuellement">✎</span>' : ''}</div><div class="text-xs font-medium">${esc(l.piece || '')}</div></td>
+      <td class="px-3 py-2 align-top"><div class="font-mono text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(l.src)}${l.edited ? ' <span class="text-indigo-500" title="Modifiée manuellement">✎</span>' : ''}</div><div class="text-xs font-medium">${esc(l.piece || '')}</div>${l.raw ? `<div class="mt-0.5 max-w-[200px] truncate text-[11px] italic text-fuchsia-700 dark:text-fuchsia-300" title="Texte source : ${esc(l.raw)}">« ${esc(l.raw)} »</div>` : ''}</td>
       <td class="px-3 py-2 align-top"><input data-id="${l.id}" data-field="code" value="${esc(l.code)}" spellcheck="false" autocomplete="off" class="${inputCls(codeErr)} font-mono uppercase" aria-label="Code article"></td>
       <td class="px-3 py-2 align-top pt-3"><div class="max-w-[340px]">${des}${r?.unit ? ` <span class="text-xs text-slate-500">(${esc(r.unit)})</span>` : ''}${typed}</div></td>
       <td class="px-3 py-2 align-top"><input data-id="${l.id}" data-field="qty" value="${esc(qtyVal)}" inputmode="decimal" autocomplete="off" class="${inputCls(qtyErr)} text-right num font-semibold" aria-label="Quantité"></td>
@@ -1014,6 +1345,8 @@ function cumulRows(c) {
   if (c.status === 'over') notes.push(c.forced ? badge('acked', 'Dépassement forcé', 'lock-open') : badge(c.blocking ? 'error' : 'warn', `Seuil dépassé de ${fmt(c.total - c.seuil)}`, 'trending-up'));
   else if (c.status === 'near') notes.push(badge('warn', `Proche du seuil (${fmt(c.pct, 0)}%)`, 'gauge'));
   if (!notes.length) notes.push(badge('ok', 'Prêt pour Intelix', 'check'));
+  const ent = state.entered[c.code];
+  if (ent !== undefined) notes.push(ent === c.total ? badge('acked', 'Saisi dans Intelix', 'keyboard') : badge('warn', `Saisi ${fmt(ent)} ≠ cumul ${fmt(c.total)}`, 'alert-triangle'));
   const ib = 'p-1.5 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10';
   return `<tbody class="border-t border-slate-200 dark:border-slate-800 ${ROW_BG[c._state]}">
     <tr>
@@ -1190,13 +1523,13 @@ function commitEdit(input) {
     const v = normCode(input.value);
     if (v === l.code) { input.value = l.code; return false; }
     log('edit', `${l.src} : code article modifié « ${l.code || '∅'} » → « ${v || '∅'} »${state.ref.get(v) ? ` (${state.ref.get(v).designation})` : ''}.`);
-    l.code = v; l.ack = {};
+    l.code = v; l.ack = {}; l.how = 'manual'; delete l.alt;
   } else {
     const raw = input.value.trim(), q = parseNum(raw);
     const same = (q === null && l.qty === null) || (Number.isNaN(q) && Number.isNaN(l.qty) && raw === l.qtyRaw) || (Number.isFinite(q) && q === l.qty);
     if (same) return false;
     log('edit', `${l.src} : quantité modifiée ${l.qty === null ? '∅' : Number.isNaN(l.qty) ? `« ${l.qtyRaw} »` : fmt(l.qty)} → ${q === null ? '∅' : Number.isNaN(q) ? `« ${raw} »` : fmt(q)}${l.code ? ` (article ${l.code})` : ''}.`);
-    l.qty = q; l.qtyRaw = raw; delete l.ack.outlier; delete l.ack.linemax; delete l.ack.dup;
+    l.qty = q; l.qtyRaw = raw; delete l.ack.outlier; delete l.ack.linemax; delete l.ack.dup; delete l.qtySub; delete l.alt;
   }
   l.edited = true;
   return true;
@@ -1217,13 +1550,48 @@ function deleteLine(id, silent) {
 
 /* ---------------------------- Événements ---------------------------- */
 function bind() {
-  const dz = $('#dropzone');
-  ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drop-active'); }));
-  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drop-active'); }));
-  dz.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+  document.querySelectorAll('.dropzone').forEach(dz => {
+    ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drop-active'); }));
+    ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drop-active'); }));
+    dz.addEventListener('drop', e => handleFiles(e.dataTransfer.files, dz.dataset.drop));
+  });
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', e => e.preventDefault());
-  $('#fileInput').addEventListener('change', e => { handleFiles(e.target.files); e.target.value = ''; });
+  $('#refInput').addEventListener('change', e => { handleFiles(e.target.files, 'ref'); e.target.value = ''; });
+  $('#srcInput').addEventListener('change', e => { handleFiles(e.target.files, 'source'); e.target.value = ''; });
+
+  // Brouillon collé
+  const parsePaste = () => {
+    const text = $('#pasteBox').value;
+    if (!text.trim()) return toast('Collez d\'abord un texte (e-mail, message, notes, tableau…).', 'warn');
+    const rows = textToTable(text);
+    const f = rows ? addFile(`Collage tableur ${++state.draftSeq}`, { Collage: rows }) : addDraft('', text, 'paste');
+    if (rows && f.role === 'ref') resyncDrafts();
+    lastPasteId = f.id;
+    renderAll();
+    toast(f.count ? `${f.count} ligne(s) structurée(s) depuis le texte collé.` : 'Aucune ligne reconnue dans ce texte.', f.count ? 'success' : 'warn');
+    if (f.count) $('#pasteBox').value = '';
+  };
+  $('#btnParse').addEventListener('click', parsePaste);
+  $('#pasteBox').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); parsePaste(); } });
+  $('#btnPasteClear').addEventListener('click', () => { $('#pasteBox').value = ''; lastPasteId = null; renderPasteResult(null); });
+  $('#btnPasteExample').addEventListener('click', () => { $('#pasteBox').value = DEMO_DRAFT; $('#pasteBox').focus(); });
+  $('#pasteResult').addEventListener('click', e => onAction(e));
+  $('#fileList').addEventListener('click', e => {
+    const r = e.target.closest('[data-reparse]');
+    if (r) {
+      const f = state.files.find(x => x.id === r.dataset.reparse); if (!f) return;
+      const edited = state.lines.filter(l => l.fileId === f.id && l.edited).length;
+      if (edited && !confirm(`${edited} ligne(s) de ce brouillon ont été corrigées. Ré-analyser effacera ces corrections. Continuer ?`)) return;
+      syncFile(f); log('info', `${f.label} ré-analysé : ${f.count} ligne(s) structurée(s).`); renderAll(); return;
+    }
+    if (e.target.closest('[data-act]')) onAction(e);
+  });
+
+  // Mode saisie assistée
+  $('#btnAssist').addEventListener('click', openAssist);
+  $('#assist').addEventListener('click', e => { if (e.target.id === 'assist' || e.target.parentElement?.id === 'assist') closeAssist(); else onAssistClick(e); });
+  document.addEventListener('keydown', onAssistKey);
 
   // Fichiers : rôle, feuille, mappage, suppression
   $('#fileList').addEventListener('change', e => {
@@ -1233,7 +1601,7 @@ function bind() {
     if (el.hasAttribute('data-role')) { const old = f.role; f.role = el.value; if (f.role === 'orders' && f.mapping.qty == null && f.qtyGuess != null) f.mapping.qty = f.qtyGuess; log('info', `« ${f.name} » : type modifié ${ROLE_LABEL[old]} → ${ROLE_LABEL[f.role]}.`); }
     else if (el.hasAttribute('data-sheet')) { f.sheet = el.value; configureFile(f); log('info', `« ${f.name} » : feuille « ${f.sheet} » sélectionnée.`); }
     else if (el.dataset.map) { const k = el.dataset.map; const v = el.value === '' ? null : +el.value; for (const kk in f.mapping) if (f.mapping[kk] === v && kk !== k && v != null) f.mapping[kk] = null; f.mapping[k] = v; log('info', `« ${f.name} » : colonne « ${FIELDS[k]} » → ${v == null ? 'aucune' : `« ${f.headers[v]} »`}.`); }
-    syncFile(f); renderAll();
+    syncFile(f); resyncDrafts(); renderAll();
   });
   $('#fileList').addEventListener('click', e => {
     const b = e.target.closest('[data-remove-file]'); if (!b) return;
@@ -1242,7 +1610,9 @@ function bind() {
     if (!confirm(`Retirer « ${f.name} » ?${edited ? `\n${edited} ligne(s) corrigée(s) seront perdues.` : ''}`)) return;
     state.files = state.files.filter(x => x !== f);
     state.lines = state.lines.filter(l => l.fileId !== f.id);
-    rebuildRef(); log('warn', `Fichier retiré : « ${f.name} ».`); renderAll();
+    rebuildRef(); if (f.role === 'ref') resyncDrafts();
+    if (lastPasteId === f.id) lastPasteId = null;
+    log('warn', `${f.kind === 'draft' ? 'Brouillon' : 'Fichier'} retiré : « ${f.name} ».`); renderAll();
   });
 
   // Paramètres
@@ -1318,7 +1688,7 @@ function bind() {
   $('#btnDemo').addEventListener('click', loadDemo);
   $('#btnReset').addEventListener('click', () => {
     if (state.lines.length && !confirm('Démarrer une nouvelle session ? Fichiers, lignes et corrections seront effacés (le journal et les paramètres sont conservés).')) return;
-    state.files = []; state.lines = []; state.forced = new Set(); state.validated = null; rebuildRef();
+    state.files = []; state.lines = []; state.forced = new Set(); state.validated = null; state.entered = {}; state.draftSeq = 0; lastPasteId = null; rebuildRef();
     Object.assign(state.ui, { filter: 'all', search: '', page: 1 });
     log('warn', 'Nouvelle session démarrée : données de travail effacées.'); renderAll();
   });
@@ -1343,8 +1713,14 @@ async function onAction(e) {
   const act = b.dataset.act, l = b.dataset.id ? findLine(b.dataset.id) : null;
   if (b.dataset.bulk === 'fixes') {
     let n = 0;
-    for (const x of state.lines) { const fix = (A.issues.get(x.id) || []).find(i => i.type === 'unknown' && i.fix); if (fix) { log('edit', `${x.src} : correction automatique « ${x.code} » → « ${fix.fix.code} ».`); x.code = fix.fix.code; x.ack = {}; x.edited = true; n++; } }
-    toast(`${n} référence(s) corrigée(s). Vérifiez les quantités associées.`, 'success');
+    for (const x of state.lines) {
+      const iss = (A.issues.get(x.id) || []).filter(i => !i.acked);
+      const fix = iss.find(i => i.type === 'unknown' && i.fixes?.[0]?.auto);
+      if (fix) { log('edit', `${x.src} : correction automatique du code « ${x.code} » → « ${fix.fixes[0].code} ».`); x.code = fix.fixes[0].code; x.how = 'manual'; x.ack = {}; x.edited = true; n++; }
+      const qf = iss.find(i => i.qtyFix != null);
+      if (qf) { log('edit', `${x.src} : correction automatique de la quantité « ${x.qtyRaw} » → ${fmt(qf.qtyFix)}.`); x.qty = qf.qtyFix; x.qtyRaw = fmtInput(qf.qtyFix); x.edited = true; n++; }
+    }
+    toast(`${n} correction(s) appliquée(s). Vérifiez les lignes concernées.`, 'success');
   } else if (b.dataset.bulk === 'dups') {
     const ids = state.lines.filter(x => (A.issues.get(x.id) || []).some(i => i.type === 'dup' && !i.acked)).map(x => x.id);
     if (!confirm(`Supprimer ${ids.length} doublon(s) probable(s) ? La première occurrence de chaque saisie est conservée.`)) return;
@@ -1352,7 +1728,19 @@ async function onAction(e) {
     toast(`${ids.length} doublon(s) supprimé(s).`, 'success');
   } else if (act === 'fix' && l) {
     log('edit', `${l.src} : référence corrigée « ${l.code} » → « ${b.dataset.code} » (suggestion acceptée).`);
-    l.code = b.dataset.code; l.ack = {}; l.edited = true;
+    l.code = b.dataset.code; l.how = 'manual'; delete l.alt; l.ack = {}; l.edited = true;
+  } else if (act === 'qtyfix' && l) {
+    const v = +b.dataset.val;
+    log('edit', `${l.src} : quantité corrigée « ${l.qtyRaw} » → ${fmt(v)} (correction proposée acceptée).`);
+    l.qty = v; l.qtyRaw = fmtInput(v); l.edited = true;
+  } else if (act === 'swap' && l && l.alt) {
+    log('edit', `${l.src} : inversion code/quantité — code « ${l.code} » → « ${l.alt.code} », quantité ${fmt(l.qty)} → ${fmt(l.alt.qty)}.`);
+    Object.assign(l, { code: l.alt.code, qty: l.alt.qty, qtyRaw: String(l.alt.qtyRaw), how: 'manual', ack: {}, edited: true }); delete l.alt;
+  } else if (act === 'addseg') {
+    const f = state.files.find(x => x.id === b.dataset.file); const u = f?.unparsed?.[+b.dataset.idx]; if (!u) return;
+    state.lines.unshift({ id: uid('L'), fileId: null, src: `${f.label} · l.${u.line}`, raw: u.seg, code: '', designation: u.seg, qtyRaw: '', qty: null, unit: '', piece: '', ack: {}, edited: true });
+    f.unparsed.splice(+b.dataset.idx, 1);
+    log('edit', `${f.label} · l.${u.line} : segment non interprété ajouté manuellement (« ${u.seg} »).`);
   } else if (act === 'ack' && l) {
     l.ack[b.dataset.type] = true;
     const iss = (A.issues.get(l.id) || []).find(i => i.ack === b.dataset.type);
@@ -1379,13 +1767,24 @@ async function onAction(e) {
   renderAll();
 }
 
-async function handleFiles(list) {
+// Après chargement d'un référentiel, les brouillons non retouchés sont ré-analysés
+function resyncDrafts() {
+  state.files.filter(f => f.kind === 'draft' && !state.lines.some(l => l.fileId === f.id && l.edited)).forEach(f => syncFile(f));
+}
+
+async function handleFiles(list, target = 'source') {
   const files = [...list]; if (!files.length) return;
   for (const file of files) {
     try {
-      const sheets = await readFile(file);
-      if (!Object.values(sheets).some(r => r.length)) throw new Error('fichier vide');
-      addFile(file.name, sheets);
+      const res = await readAny(file);
+      if (res.kind === 'text') {
+        if (target === 'ref') throw new Error('le référentiel doit être un tableau (Excel/CSV) avec une colonne « Code article »');
+        addDraft(file.name, res.text, 'file');
+        continue;
+      }
+      if (!Object.values(res.sheets).some(r => r.length)) throw new Error('fichier vide');
+      const f = addFile(file.name, res.sheets, target === 'ref' ? 'ref' : undefined);
+      if (f.role === 'ref') resyncDrafts();
     } catch (err) {
       log('error', `Impossible de lire « ${file.name} » : ${err.message}`);
       toast(`Lecture impossible : ${file.name} — ${err.message}`, 'error');
@@ -1396,7 +1795,133 @@ async function handleFiles(list) {
   toast(`${files.length} fichier(s) traité(s) — ${s.blocking ? `${s.blocking} erreur(s) bloquante(s) détectée(s)` : 'aucune erreur bloquante'}.`, s.blocking ? 'warn' : 'success');
 }
 
+/* ---------------------------- Mode saisie assistée ---------------------------- */
+const codeCmp = (a, b) => a.code.localeCompare(b.code, 'fr', { numeric: true });
+function assistItems() { analyze(); return [...A.cumuls.values()].filter(c => c.ready).sort(codeCmp); }
+
+function openAssist() {
+  const items = assistItems();
+  if (!items.length) return toast('Aucun cumul conforme à saisir : corrigez d\'abord les erreurs bloquantes.', 'warn');
+  const first = items.findIndex(c => state.entered[c.code] !== c.total);
+  Object.assign(state.assist, { open: true, idx: first < 0 ? 0 : first });
+  $('#assist').classList.remove('hidden'); $('#assist').hidden = false; document.body.style.overflow = 'hidden';
+  const excl = A.cumuls.size - items.length;
+  log('info', `Mode saisie assistée ouvert : ${items.length} article(s) conforme(s)${excl ? `, ${excl} non conforme(s) exclu(s)` : ''}.`);
+  renderAssist(true);
+  $('#assistBody').focus();
+}
+
+function closeAssist() {
+  state.assist.open = false;
+  $('#assist').classList.add('hidden'); $('#assist').hidden = true; document.body.style.overflow = '';
+  document.activeElement?.blur();
+  renderAll();
+}
+
+function renderAssist(arrived) {
+  const items = assistItems();
+  if (!items.length) { state.assist.open = false; $('#assist').classList.add('hidden'); $('#assist').hidden = true; document.body.style.overflow = ''; return; }
+  const i = Math.max(0, Math.min(state.assist.idx, items.length - 1)); state.assist.idx = i;
+  const c = items[i], ent = state.entered[c.code];
+  const done = items.filter(x => state.entered[x.code] === x.total).length;
+  const kbd = k => `<kbd class="ml-1 rounded border border-current/30 px-1 text-[10px] font-mono opacity-70">${k}</kbd>`;
+  const btn2 = 'inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40';
+  $('#assistBody').innerHTML = `
+    <div class="flex items-center gap-3 px-5 pt-5">
+      <span class="h-9 w-9 rounded-xl bg-indigo-600 text-white grid place-items-center text-lg"><i data-lucide="keyboard"></i></span>
+      <div class="min-w-0"><h3 id="assistTitle" class="font-semibold leading-tight">Saisie assistée Intelix</h3><p class="text-xs text-slate-500 dark:text-slate-400">Article ${i + 1} / ${items.length} · ${done} saisi(s)</p></div>
+      <button data-a="close" class="ml-auto p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" title="Fermer (Échap)" aria-label="Fermer"><i data-lucide="x"></i></button>
+    </div>
+    <div class="px-5 pt-3"><div class="h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full bg-indigo-600 transition-all" style="width:${(done / items.length) * 100}%"></div></div></div>
+    <div class="p-5 space-y-3">
+      <div class="rounded-xl border border-slate-200 dark:border-slate-800 p-4">
+        <div class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">1 · Code article</div>
+        <div class="mt-1 flex flex-wrap items-center gap-3">
+          <div id="assistCode" class="font-mono text-3xl sm:text-4xl font-bold tracking-wider break-all">${esc(c.code)}</div>
+          <button data-a="code" class="ml-auto inline-flex items-center gap-2 rounded-lg bg-slate-800 dark:bg-slate-700 text-white px-3 py-2 text-sm font-semibold hover:bg-slate-700"><i data-lucide="copy"></i>Copier le code${kbd('C')}</button>
+        </div>
+        <div class="mt-1 text-sm text-slate-600 dark:text-slate-300">${esc(c.designation || '—')}${c.unit ? ` <span class="text-slate-500">(${esc(c.unit)})</span>` : ''}</div>
+      </div>
+      <div class="rounded-xl border border-slate-200 dark:border-slate-800 p-4">
+        <div class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">2 · Quantité cumulée</div>
+        <div class="mt-1 flex flex-wrap items-center gap-3">
+          <div id="assistQty" class="num text-3xl sm:text-4xl font-bold text-indigo-700 dark:text-indigo-300">${esc(fmtInput(c.total))}</div>
+          <span class="text-xs text-slate-500 dark:text-slate-400">${c.count} ligne(s) cumulée(s)${c.seuil ? ` · seuil ${fmt(c.seuil)}` : ''}</span>
+          <button data-a="qty" class="ml-auto inline-flex items-center gap-2 rounded-lg bg-slate-800 dark:bg-slate-700 text-white px-3 py-2 text-sm font-semibold hover:bg-slate-700"><i data-lucide="copy"></i>Copier la quantité${kbd('Q')}</button>
+        </div>
+      </div>
+      ${ent === c.total ? `<div class="text-sm text-indigo-700 dark:text-indigo-300 flex items-center gap-2"><i data-lucide="check-circle-2"></i>Déjà confirmé comme saisi dans Intelix.</div>`
+        : ent !== undefined ? `<div class="text-sm text-amber-700 dark:text-amber-300 flex items-center gap-2"><i data-lucide="alert-triangle"></i>Saisi précédemment avec ${fmt(ent)} : le cumul a changé depuis (${fmt(c.total)}). Corrigez la saisie Intelix.</div>` : ''}
+      <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"><input type="checkbox" data-a="auto" ${state.assist.autoCopy ? 'checked' : ''} class="h-4 w-4 accent-indigo-600">Copier automatiquement le code à l'arrivée sur chaque article</label>
+    </div>
+    <div class="px-5 pb-5 grid grid-cols-3 gap-2">
+      <button data-a="prev" ${i === 0 ? 'disabled' : ''} class="${btn2}"><i data-lucide="arrow-left"></i>Précédent</button>
+      <button data-a="next" ${i >= items.length - 1 ? 'disabled' : ''} class="${btn2}">Passer<i data-lucide="arrow-right"></i></button>
+      <button data-a="done" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 text-white px-3 py-2.5 text-sm font-semibold hover:bg-indigo-500"><i data-lucide="check"></i>Saisi${kbd('Entrée')}</button>
+    </div>`;
+  icons();
+  if (arrived && state.assist.autoCopy) copyText(c.code).then(ok => ok && flashEl('#assistCode'));
+}
+
+function flashEl(sel) { const el = $(sel); if (!el) return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+
+async function assistDo(a) {
+  const items = assistItems(); const c = items[state.assist.idx]; if (!c) return;
+  if (a === 'close') return closeAssist();
+  if (a === 'code' || a === 'qty') {
+    const ok = await copyText(a === 'code' ? c.code : fmtInput(c.total));
+    if (ok) flashEl(a === 'code' ? '#assistCode' : '#assistQty'); else toast('Copie impossible.', 'error');
+    return;
+  }
+  if (a === 'prev') { state.assist.idx--; return renderAssist(true); }
+  if (a === 'next') { state.assist.idx++; return renderAssist(true); }
+  if (a === 'done') {
+    state.entered[c.code] = c.total;
+    log('success', `Saisie Intelix confirmée : ${c.code}${c.designation ? ` (${c.designation})` : ''} — quantité ${fmt(c.total)}.`);
+    const next = items.findIndex((x, k) => k > state.assist.idx && state.entered[x.code] !== x.total);
+    const any = items.findIndex(x => state.entered[x.code] !== x.total);
+    if (any < 0) {
+      log('success', `Saisie assistée terminée : ${items.length} article(s) saisi(s), quantité totale ${fmt(items.reduce((s, x) => s + x.total, 0))}.`);
+      toast('Tous les articles conformes ont été saisis dans Intelix.', 'success');
+      save(); return closeAssist();
+    }
+    state.assist.idx = next >= 0 ? next : any;
+    save(); renderAssist(true);
+  }
+}
+
+function onAssistClick(e) {
+  const b = e.target.closest('[data-a]'); if (!b) return;
+  if (b.dataset.a === 'auto') { state.assist.autoCopy = b.checked; save(); return; }
+  assistDo(b.dataset.a);
+}
+
+function onAssistKey(e) {
+  if (!state.assist.open || e.ctrlKey || e.metaKey || e.altKey) return;
+  const map = { Escape: 'close', c: 'code', C: 'code', q: 'qty', Q: 'qty', Enter: 'done', ArrowRight: 'next', ArrowLeft: 'prev' };
+  const a = map[e.key]; if (!a) return;
+  e.preventDefault(); e.stopPropagation();
+  const items = assistItems();
+  if (a === 'prev' && state.assist.idx === 0) return;
+  if (a === 'next' && state.assist.idx >= items.length - 1) return;
+  assistDo(a);
+}
+
 /* ---------------------------- Jeu de démonstration ---------------------------- */
+const DEMO_DRAFT = `Bonjour, voici les compléments pour aujourd'hui :
+Commande CMD-4213 :
+- 100245 x 20
+- Papier A4 - 10 ramettes
+- 5x 300051
+- Gants nitrile taille M : 1O
+- ART-401020 x 4
+[15/10/2026 09:42] Karim: rajoute 3 désinfectant
+- 81023 x 50
+Réf : 512000
+Qté : 6
+Merci, cordialement
+Tél : 06 12 34 56 78`;
+
 function loadDemo() {
   if (state.lines.length && !confirm('Remplacer les données actuelles par le jeu de démonstration ?')) return;
   state.files = []; state.lines = []; state.forced = new Set(); state.validated = null;
@@ -1422,8 +1947,10 @@ function loadDemo() {
     ['CMD-4212', '15/10/2026', 200110, 'Papier A4', 50], ['CMD-4212', '15/10/2026', 300051, 'Câble RJ45 5m', 30]];
   addFile('Referentiel_Articles_DEMO.xlsx', { Articles: ref });
   addFile('Commandes_Semaine42_DEMO.xlsx', { Commandes: o });
+  state.draftSeq = 0; state.entered = {};
+  lastPasteId = addDraft('', DEMO_DRAFT, 'paste').id;
   Object.assign(state.ui, { view: 'lines', filter: 'all', search: '', page: 1 });
-  log('info', 'Jeu de démonstration chargé (inversion de chiffres, doublon, saisie aberrante, seuils dépassés, référence inconnue, quantité invalide…).');
+  log('info', 'Jeu de démonstration chargé (inversion de chiffres, doublon, saisie aberrante, seuils dépassés, référence inconnue, quantité invalide, brouillon e-mail/WhatsApp…).');
   renderAll();
   toast('Démo chargée : corrigez les anomalies signalées en rouge puis exportez.', 'info');
 }
