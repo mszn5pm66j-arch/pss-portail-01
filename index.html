@@ -1,0 +1,1443 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matrice Intelix</title>
+<meta name="description" content="Matrice intelligente intermédiaire : contrôle, cumul et export sécurisé des saisies vers Intelix.">
+<script>
+  // Thème appliqué avant le rendu pour éviter le flash
+  try {
+    var t = localStorage.getItem('mi-theme');
+    if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark');
+  } catch (e) {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: { extend: { fontFamily: {
+      sans: ['Inter', 'ui-sans-serif', 'system-ui', 'Segoe UI', 'Roboto', 'sans-serif'],
+      mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Consolas', 'monospace']
+    } } }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+  :root { color-scheme: light; }
+  .dark { color-scheme: dark; }
+  body { background: #f1f5f9; }
+  .dark body { background: #020617; }
+  [data-lucide] { width: 1em; height: 1em; display: inline-block; }
+  svg.lucide { width: 1.1em; height: 1.1em; flex-shrink: 0; }
+  .num { font-variant-numeric: tabular-nums; }
+  .cell-input { width: 100%; min-width: 0; }
+  .cell-input:focus { outline: none; }
+  .drop-active { border-color: #6366f1 !important; background: rgba(99,102,241,.08) !important; }
+  .scroll-thin::-webkit-scrollbar { height: 8px; width: 8px; }
+  .scroll-thin::-webkit-scrollbar-thumb { background: rgba(100,116,139,.4); border-radius: 8px; }
+  @keyframes flash { 0% { background: rgba(99,102,241,.25); } 100% { background: transparent; } }
+  .flash { animation: flash 1.2s ease-out; }
+  @media print { .no-print { display: none !important; } }
+</style>
+</head>
+<body class="min-h-screen text-slate-800 dark:text-slate-100 antialiased">
+
+<!-- ============ EN-TÊTE ============ -->
+<header class="sticky top-0 z-30 border-b border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur no-print">
+  <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="h-10 w-10 rounded-xl bg-indigo-600 text-white grid place-items-center shadow-sm shadow-indigo-600/30 text-xl"><i data-lucide="shield-check"></i></div>
+      <div class="min-w-0">
+        <h1 class="font-semibold text-base sm:text-lg leading-tight truncate">Matrice Intelligente Intermédiaire</h1>
+        <p class="text-xs text-slate-500 dark:text-slate-400 truncate">Garde-fou &amp; pré-traitement des saisies Intelix</p>
+      </div>
+    </div>
+    <div id="conformityBadge" class="order-last w-full lg:order-none lg:w-auto lg:ml-auto"></div>
+    <div class="flex items-center gap-2 ml-auto lg:ml-0">
+      <button id="btnDemo" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800" title="Charger un jeu de données de démonstration"><i data-lucide="flask-conical"></i><span class="hidden sm:inline">Démo</span></button>
+      <button id="btnReset" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800" title="Démarrer une nouvelle session"><i data-lucide="rotate-ccw"></i><span class="hidden sm:inline">Nouvelle session</span></button>
+      <button id="btnTheme" class="inline-flex items-center rounded-lg border border-slate-300 dark:border-slate-700 p-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800" title="Basculer thème clair / sombre" aria-label="Basculer le thème"><i data-lucide="moon" class="dark:hidden"></i><i data-lucide="sun" class="hidden dark:inline-block"></i></button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+  <!-- ============ A. IMPORTATION ============ -->
+  <div class="grid gap-6 xl:grid-cols-3">
+    <section class="xl:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div class="px-5 pt-5 pb-3 flex flex-wrap items-center gap-2">
+        <span class="h-7 w-7 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 grid place-items-center text-sm font-bold">1</span>
+        <h2 class="font-semibold">Importation des fichiers source</h2>
+        <div id="sourceStatus" class="flex flex-wrap gap-2 ml-auto"></div>
+      </div>
+      <div class="px-5 pb-5 space-y-4">
+        <label id="dropzone" for="fileInput" class="block cursor-pointer rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/40 px-4 py-8 text-center transition hover:border-indigo-400">
+          <div class="mx-auto h-12 w-12 rounded-full bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 grid place-items-center text-2xl mb-3"><i data-lucide="upload-cloud"></i></div>
+          <p class="font-medium">Glissez-déposez vos fichiers ici <span class="text-slate-500 dark:text-slate-400 font-normal">ou cliquez pour parcourir</span></p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Excel (.xlsx, .xls, .ods) ou CSV (; , tabulation) — Référentiel articles et/ou fichiers de commandes / cumuls</p>
+          <input id="fileInput" type="file" multiple accept=".xlsx,.xls,.xlsm,.ods,.csv,.txt,.tsv" class="sr-only">
+        </label>
+        <div id="fileList" class="grid gap-3 md:grid-cols-2"></div>
+      </div>
+    </section>
+
+    <!-- Paramètres -->
+    <section class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div class="px-5 pt-5 pb-3 flex items-center gap-2">
+        <span class="h-7 w-7 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 grid place-items-center text-base"><i data-lucide="sliders-horizontal"></i></span>
+        <h2 class="font-semibold">Règles métier &amp; garde-fous</h2>
+      </div>
+      <div class="px-5 pb-5 space-y-4 text-sm">
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block">
+            <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Seuil max de cumul (global)</span>
+            <input data-setting="seuil" type="number" min="0" step="any" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 num focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </label>
+          <label class="block">
+            <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Alerte préventive à (%)</span>
+            <input data-setting="alertPct" type="number" min="1" max="100" step="1" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 num focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </label>
+          <label class="block">
+            <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Saisie aberrante si ≥ × médiane</span>
+            <input data-setting="outlierFactor" type="number" min="1.5" step="0.5" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 num focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </label>
+          <label class="block">
+            <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Quantité max par ligne (0 = off)</span>
+            <input data-setting="lineMax" type="number" min="0" step="any" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 num focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </label>
+        </div>
+        <p class="text-xs text-slate-500 dark:text-slate-400 -mt-1">Une colonne « Seuil max » dans le fichier de référence est prioritaire sur le seuil global.</p>
+        <div class="space-y-2">
+          <label class="flex items-start gap-3"><input data-setting="seuilBlocking" type="checkbox" class="mt-0.5 h-4 w-4 rounded accent-indigo-600"><span>Dépassement de seuil <b>bloquant</b> <span class="text-slate-500 dark:text-slate-400">(forçage manuel tracé)</span></span></label>
+          <label class="flex items-start gap-3"><input data-setting="dupBlocking" type="checkbox" class="mt-0.5 h-4 w-4 rounded accent-indigo-600"><span>Doublons <b>bloquants</b> tant qu'ils ne sont pas confirmés ou supprimés</span></label>
+          <label class="flex items-start gap-3"><input data-setting="desigCheck" type="checkbox" class="mt-0.5 h-4 w-4 rounded accent-indigo-600"><span>Contrôler la cohérence désignation ↔ code <span class="text-slate-500 dark:text-slate-400">(mauvais article sélectionné)</span></span></label>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ B/C. CONTRÔLE ============ -->
+  <section class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+    <div class="px-5 pt-5 pb-3 flex flex-wrap items-center gap-2">
+      <span class="h-7 w-7 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 grid place-items-center text-sm font-bold">2</span>
+      <h2 class="font-semibold">Contrôle, cumuls &amp; correction rapide</h2>
+      <span class="text-xs text-slate-500 dark:text-slate-400 hidden md:inline">— modifiez directement codes et quantités dans le tableau (Entrée = ligne suivante, Échap = annuler)</span>
+    </div>
+
+    <div id="kpis" class="px-5 grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-6"></div>
+    <div id="todo" class="px-5 pt-4"></div>
+
+    <!-- Barre d'outils -->
+    <div class="px-5 pt-4 pb-3 flex flex-wrap items-center gap-3">
+      <div class="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1 text-sm" role="tablist">
+        <button data-view="lines" class="view-btn rounded-md px-3 py-1.5 font-medium inline-flex items-center gap-1.5"><i data-lucide="list"></i>Lignes saisies</button>
+        <button data-view="cumuls" class="view-btn rounded-md px-3 py-1.5 font-medium inline-flex items-center gap-1.5"><i data-lucide="sigma"></i>Cumuls par article</button>
+      </div>
+      <div class="relative flex-1 min-w-[220px]">
+        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><i data-lucide="search"></i></span>
+        <input id="search" type="search" placeholder="Rechercher code, désignation, pièce…  ( / )" class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+      </div>
+      <div id="filters" class="inline-flex flex-wrap gap-2 text-sm"></div>
+      <label class="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"><input id="errorsFirst" type="checkbox" class="h-4 w-4 accent-indigo-600">Anomalies en premier</label>
+      <button id="btnAddLine" class="inline-flex items-center gap-2 rounded-lg bg-slate-800 dark:bg-slate-700 text-white px-3 py-2 text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-600"><i data-lucide="plus"></i>Ajouter une ligne</button>
+    </div>
+
+    <div class="px-5 pb-2">
+      <div class="overflow-x-auto scroll-thin rounded-xl border border-slate-200 dark:border-slate-800">
+        <table class="w-full text-sm" id="dataTable"></table>
+      </div>
+    </div>
+    <div id="pager" class="px-5 pb-5 pt-2 flex flex-wrap items-center gap-3 text-sm text-slate-600 dark:text-slate-400"></div>
+  </section>
+
+  <!-- ============ D. EXPORT ============ -->
+  <section class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+    <div class="px-5 pt-5 pb-3 flex flex-wrap items-center gap-2">
+      <span class="h-7 w-7 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 grid place-items-center text-sm font-bold">3</span>
+      <h2 class="font-semibold">Validation, export &amp; intégration Intelix</h2>
+      <div id="validationState" class="ml-auto"></div>
+    </div>
+    <div class="px-5 pb-5 grid gap-6 lg:grid-cols-5">
+      <div class="lg:col-span-3 grid gap-4 sm:grid-cols-2 text-sm">
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Contenu exporté</span>
+          <select data-setting="exportMode" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2">
+            <option value="cumul">Cumuls par article (1 ligne / article)</option>
+            <option value="detail">Détail des lignes contrôlées</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Format de fichier</span>
+          <select data-setting="exportFormat" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2">
+            <option value="csv">CSV (import Intelix)</option>
+            <option value="xlsx">Excel (.xlsx)</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Séparateur CSV</span>
+          <select data-setting="sep" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2">
+            <option value=";">Point-virgule ( ; )</option>
+            <option value=",">Virgule ( , )</option>
+            <option value="\t">Tabulation</option>
+            <option value="|">Barre verticale ( | )</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Séparateur décimal</span>
+          <select data-setting="decimal" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2">
+            <option value=",">Virgule (12,5)</option>
+            <option value=".">Point (12.5)</option>
+          </select>
+        </label>
+        <div class="sm:col-span-2">
+          <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Structure des colonnes Intelix (en-têtes &amp; colonnes incluses)</span>
+          <div id="exportCols" class="mt-1 grid gap-2 sm:grid-cols-2 xl:grid-cols-3"></div>
+        </div>
+        <div class="sm:col-span-2 flex flex-wrap gap-x-6 gap-y-2">
+          <label class="inline-flex items-center gap-2"><input data-setting="header" type="checkbox" class="h-4 w-4 accent-indigo-600">Inclure la ligne d'en-tête</label>
+          <label class="inline-flex items-center gap-2"><input data-setting="bom" type="checkbox" class="h-4 w-4 accent-indigo-600">Encodage UTF-8 avec BOM (accents Excel)</label>
+        </div>
+      </div>
+      <div class="lg:col-span-2 flex flex-col gap-3">
+        <div id="exportSummary" class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-4 text-sm"></div>
+        <button id="btnValidate" class="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-indigo-600 text-indigo-700 dark:text-indigo-300 px-4 py-2.5 font-semibold hover:bg-indigo-50 dark:hover:bg-indigo-500/10"><i data-lucide="badge-check"></i>Valider les cumuls (audit)</button>
+        <button id="btnExport" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-3 text-base font-semibold shadow-sm shadow-indigo-600/30 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"><i data-lucide="file-down"></i><span id="btnExportLabel">Exporter pour Intelix</span></button>
+        <div class="flex gap-2">
+          <button id="btnCopy" class="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2.5 font-medium hover:bg-slate-100 dark:hover:bg-slate-800"><i data-lucide="clipboard-copy"></i>Copier le cumul dans le presse-papier</button>
+          <select id="copyFormat" class="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 text-sm" title="Format de copie">
+            <option value="code-qty">Code ⇥ Qté</option>
+            <option value="code-des-qty">Code ⇥ Désig. ⇥ Qté</option>
+            <option value="qty">Qté seule</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ JOURNAL D'AUDIT ============ -->
+  <section class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+    <div class="px-5 pt-5 pb-3 flex flex-wrap items-center gap-2">
+      <span class="h-7 w-7 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 grid place-items-center text-base"><i data-lucide="scroll-text"></i></span>
+      <h2 class="font-semibold">Journal d'audit</h2>
+      <span id="logCount" class="text-xs text-slate-500 dark:text-slate-400"></span>
+      <div class="ml-auto flex gap-2">
+        <button id="btnLogExport" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"><i data-lucide="download"></i>Exporter le journal</button>
+        <button id="btnLogClear" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"><i data-lucide="eraser"></i>Effacer</button>
+      </div>
+    </div>
+    <div class="px-5 pb-5">
+      <ol id="log" class="max-h-80 overflow-y-auto scroll-thin rounded-xl border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 text-sm"></ol>
+    </div>
+  </section>
+
+  <p class="text-center text-xs text-slate-400 dark:text-slate-500 pb-4">Traitement 100 % local dans le navigateur — aucune donnée n'est envoyée sur un serveur. Session sauvegardée automatiquement sur ce poste.</p>
+</main>
+
+<div id="toasts" class="fixed bottom-4 right-4 left-4 sm:left-auto z-50 flex flex-col gap-2 items-stretch sm:items-end pointer-events-none"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   MATRICE INTELLIGENTE INTERMÉDIAIRE — INTELIX
+   Tout le traitement est local : lecture, contrôle, cumul, export.
+   ===================================================================== */
+
+const STORE_KEY = 'matrice-intelix-v1';
+
+const FIELDS = {
+  code: 'Code article', designation: 'Désignation', qty: 'Quantité',
+  unit: 'Unité', seuil: 'Seuil max', piece: 'Pièce / N° commande'
+};
+const ROLE_FIELDS = { ref: ['code', 'designation', 'unit', 'seuil'], orders: ['code', 'designation', 'qty', 'unit', 'piece'] };
+const ROLE_LABEL = { ref: 'Référentiel articles', orders: 'Commandes / cumuls', ignore: 'Ignoré' };
+
+// Synonymes d'en-têtes pour la détection automatique des colonnes
+const SYN = {
+  code: ['code article', 'code', 'article', 'ref', 'reference', 'ref article', 'reference article', 'code produit', 'sku', 'codeart', 'code art', 'cd article', 'item', 'code intelix', 'ean'],
+  designation: ['designation', 'libelle', 'description', 'designation article', 'libelle article', 'nom produit', 'produit', 'intitule'],
+  qty: ['quantite', 'qte', 'qty', 'quantity', 'quantite commandee', 'qte commandee', 'nombre', 'nb', 'cumul', 'volume', 'qt'],
+  unit: ['unite', 'unit', 'u', 'uv', 'conditionnement', 'unite de vente'],
+  seuil: ['seuil', 'seuil max', 'max', 'plafond', 'quantite max', 'qte max', 'limite', 'seuil maximum'],
+  piece: ['commande', 'n commande', 'no commande', 'num commande', 'numero commande', 'bon', 'bon de commande', 'piece', 'n piece', 'document', 'cde', 'n cde', 'client', 'date']
+};
+
+const DEFAULTS = {
+  seuil: 100, alertPct: 90, outlierFactor: 5, lineMax: 0,
+  seuilBlocking: true, dupBlocking: true, desigCheck: true,
+  exportMode: 'cumul', exportFormat: 'csv', sep: ';', decimal: ',', bom: true, header: true,
+  labels: { code: 'CODE_ARTICLE', designation: 'DESIGNATION', qty: 'QUANTITE', unit: 'UNITE', piece: 'PIECE' },
+  cols: { designation: true, unit: true, piece: true }
+};
+
+const state = {
+  files: [],          // fichiers importés
+  ref: new Map(),     // code -> {code, designation, unit, seuil, src}
+  lines: [],          // lignes de saisie
+  forced: new Set(),  // codes dont le dépassement de seuil est forcé
+  log: [],
+  settings: JSON.parse(JSON.stringify(DEFAULTS)),
+  ui: { view: 'lines', filter: 'all', search: '', page: 1, pageSize: 50, errorsFirst: false },
+  validated: null     // {at, sig, articles, total}
+};
+let A = { issues: new Map(), cumuls: new Map(), stats: {} };   // résultat de l'analyse
+let seq = Date.now();
+const uid = p => p + (++seq).toString(36);
+const sugCache = new Map();
+let pendingFocus = null;
+let lastDeleted = null;
+
+/* ---------------------------- Utilitaires ---------------------------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const normText = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const fmt = (n, d = 3) => Number.isFinite(n) ? n.toLocaleString('fr-FR', { maximumFractionDigits: d }) : '—';
+const fmtInput = n => Number.isFinite(n) ? String(+n.toFixed(6)).replace('.', ',') : '';
+const nowStr = (d = new Date()) => d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const icons = () => { try { window.lucide && lucide.createIcons(); } catch (e) {} };
+
+function normCode(v) {
+  if (v == null) return '';
+  if (typeof v === 'number') v = Number.isInteger(v) ? v.toFixed(0) : String(v);
+  return String(v).trim().toUpperCase().replace(/\s+/g, '');
+}
+
+// Retourne un nombre, null (vide) ou NaN (invalide)
+function parseNum(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+  if (v == null) return null;
+  let s = String(v).trim().replace(/[\s  ']/g, '');
+  if (!s) return null;
+  if (s.includes(',') && s.includes('.')) {
+    s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  } else s = s.replace(',', '.');
+  if (!/^[-+]?\d*\.?\d+$/.test(s)) return NaN;
+  return Number(s);
+}
+
+function cellToString(v) {
+  if (v instanceof Date) return v.toLocaleDateString('fr-FR');
+  return v == null ? '' : String(v).trim();
+}
+
+function median(a) {
+  const s = [...a].sort((x, y) => x - y), m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+function levenshtein(a, b, max) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (Math.abs(m - n) >= max) return max;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i]; let rowMin = i;
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (cur[j] < rowMin) rowMin = cur[j];
+    }
+    if (rowMin >= max) return max;
+    prev = cur;
+  }
+  return prev[n];
+}
+
+// Similarité de désignations (coefficient de Dice sur bigrammes)
+function similarity(a, b) {
+  a = normText(a); b = normText(b);
+  if (!a || !b) return 1;
+  if (a === b || a.includes(b) || b.includes(a)) return 1;
+  const bg = s => { const m = new Map(); const t = s.replace(/ /g, ''); for (let i = 0; i < t.length - 1; i++) { const k = t.substr(i, 2); m.set(k, (m.get(k) || 0) + 1); } return m; };
+  const A1 = bg(a), B1 = bg(b); let inter = 0, tot = 0;
+  A1.forEach((c, k) => { inter += Math.min(c, B1.get(k) || 0); tot += c; });
+  B1.forEach(c => { tot += c; });
+  return tot ? (2 * inter) / tot : 0;
+}
+
+function hash(str) { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return (h >>> 0).toString(16).toUpperCase().padStart(8, '0'); }
+
+/* ---------------------------- Journal & toasts ---------------------------- */
+const LOG_STYLE = {
+  info:    ['info', 'text-slate-500 dark:text-slate-400'],
+  success: ['check-circle-2', 'text-emerald-600 dark:text-emerald-400'],
+  warn:    ['alert-triangle', 'text-amber-600 dark:text-amber-400'],
+  error:   ['octagon-alert', 'text-red-600 dark:text-red-400'],
+  edit:    ['pencil', 'text-indigo-600 dark:text-indigo-400'],
+  export:  ['file-down', 'text-indigo-600 dark:text-indigo-400']
+};
+function log(type, msg) {
+  state.log.unshift({ ts: new Date().toISOString(), type, msg });
+  if (state.log.length > 2000) state.log.length = 2000;
+  renderLog(); save();
+}
+
+function toast(msg, type = 'info', action) {
+  const colors = { info: 'bg-slate-800 text-white', success: 'bg-emerald-600 text-white', warn: 'bg-amber-500 text-slate-900', error: 'bg-red-600 text-white' };
+  const el = document.createElement('div');
+  el.className = `pointer-events-auto max-w-md rounded-xl shadow-lg px-4 py-3 text-sm flex items-start gap-3 ${colors[type] || colors.info}`;
+  el.innerHTML = `<span class="mt-0.5"><i data-lucide="${(LOG_STYLE[type] || LOG_STYLE.info)[0]}"></i></span><span class="flex-1">${esc(msg)}</span>`;
+  if (action) {
+    const b = document.createElement('button');
+    b.className = 'font-semibold underline underline-offset-2 whitespace-nowrap';
+    b.textContent = action.label;
+    b.onclick = () => { action.fn(); el.remove(); };
+    el.appendChild(b);
+  }
+  $('#toasts').appendChild(el); icons();
+  setTimeout(() => el.remove(), action ? 8000 : 4500);
+}
+
+/* ---------------------------- Persistance ---------------------------- */
+let saveTimer = null;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const base = {
+      v: 1, settings: state.settings, lines: state.lines, forced: [...state.forced], log: state.log,
+      validated: state.validated, ui: { view: state.ui.view, pageSize: state.ui.pageSize, errorsFirst: state.ui.errorsFirst }
+    };
+    const files = withRows => state.files.map(f => ({
+      id: f.id, name: f.name, role: f.role, sheet: f.sheet, headerRow: f.headerRow, headers: f.headers,
+      mapping: f.mapping, count: f.count, importedAt: f.importedAt, refEntries: f.refEntries || [],
+      rows: withRows && f.sheets ? f.sheets[f.sheet] : null
+    }));
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ ...base, files: files(true) })); }
+    catch (e) {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify({ ...base, files: files(false) })); } catch (e2) { /* stockage indisponible */ }
+    }
+  }, 300);
+}
+
+function load() {
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) {}
+  if (!data || data.v !== 1) return false;
+  state.settings = { ...JSON.parse(JSON.stringify(DEFAULTS)), ...data.settings };
+  state.settings.labels = { ...DEFAULTS.labels, ...(data.settings?.labels || {}) };
+  state.settings.cols = { ...DEFAULTS.cols, ...(data.settings?.cols || {}) };
+  state.lines = data.lines || [];
+  state.lines.forEach(l => { if (l.qty === undefined || (l.qty === null && l.qtyRaw)) l.qty = parseNum(l.qtyRaw); l.ack = l.ack || {}; });
+  state.forced = new Set(data.forced || []);
+  state.log = data.log || [];
+  state.validated = data.validated || null;
+  Object.assign(state.ui, data.ui || {});
+  state.files = (data.files || []).map(f => ({ ...f, sheets: f.rows ? { [f.sheet]: f.rows } : null, sheetNames: [f.sheet] }));
+  state.files.forEach(f => delete f.rows);
+  rebuildRef();
+  return true;
+}
+
+/* ---------------------------- Lecture des fichiers ---------------------------- */
+function decodeText(buf) {
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch (e) { return new TextDecoder('windows-1252').decode(buf); }
+}
+
+function parseCSV(text) {
+  text = text.replace(/^﻿/, '');
+  let sep = null;
+  const m = text.match(/^sep=(.)\r?\n/i);
+  if (m) { sep = m[1]; text = text.slice(m[0].length); }
+  if (!sep) {
+    const first = (text.split(/\r?\n/).find(l => l.trim()) || '');
+    let best = -1;
+    for (const c of [';', '\t', ',', '|']) {
+      let n = 0, q = false;
+      for (const ch of first) { if (ch === '"') q = !q; else if (ch === c && !q) n++; }
+      if (n > best) { best = n; sep = c; }
+    }
+  }
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === sep) { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell); rows.push(row); row = []; cell = '';
+    } else cell += ch;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(c => String(c).trim() !== ''));
+}
+
+async function readFile(file) {
+  const buf = await file.arrayBuffer();
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (['csv', 'txt', 'tsv'].includes(ext)) return { 'CSV': parseCSV(decodeText(buf)) };
+  if (!window.XLSX) throw new Error('la bibliothèque Excel (SheetJS) n\'a pas pu être chargée. Vérifiez la connexion ou utilisez un fichier CSV.');
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  const sheets = {};
+  wb.SheetNames.forEach(n => {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', raw: true, blankrows: false });
+    sheets[n] = rows.map(r => r.map(c => (c instanceof Date ? cellToString(c) : c)));
+  });
+  return sheets;
+}
+
+function headerScore(h, field) {
+  const n = normText(h); if (!n) return 0;
+  let best = 0;
+  for (const s of SYN[field]) {
+    if (n === s) { best = Math.max(best, 3); continue; }
+    if (s.length <= 2) continue;
+    if (n.startsWith(s + ' ') || n.endsWith(' ' + s)) best = Math.max(best, 2);
+    else if ((' ' + n + ' ').includes(' ' + s + ' ')) best = Math.max(best, 1);
+  }
+  return best;
+}
+
+function detectMapping(headers, rows, headerRow) {
+  const order = ['code', 'qty', 'designation', 'seuil', 'unit', 'piece'];
+  const cands = [];
+  headers.forEach((h, col) => order.forEach((f, fi) => { const s = headerScore(h, f); if (s) cands.push({ f, col, s, fi }); }));
+  cands.sort((a, b) => b.s - a.s || a.fi - b.fi);
+  const map = {}, taken = new Set();
+  for (const c of cands) if (map[c.f] == null && !taken.has(c.col)) { map[c.f] = c.col; taken.add(c.col); }
+  if (map.code == null) { const c = headers.findIndex((_, i) => !taken.has(i)); if (c >= 0) { map.code = c; taken.add(c); } }
+  if (map.qty == null) {
+    // repli : colonne majoritairement numérique
+    const sample = rows.slice(headerRow + 1, headerRow + 40);
+    let bestCol = -1, bestRatio = 0.6;
+    headers.forEach((_, i) => {
+      if (taken.has(i)) return;
+      const vals = sample.map(r => r[i]).filter(v => v !== '' && v != null);
+      if (!vals.length) return;
+      const ratio = vals.filter(v => Number.isFinite(parseNum(v))).length / vals.length;
+      if (ratio > bestRatio) { bestRatio = ratio; bestCol = i; }
+    });
+    if (bestCol >= 0 && headerScore(headers[bestCol], 'seuil') === 0) map.qtyGuess = bestCol;
+  }
+  return map;
+}
+
+function configureFile(f) {
+  const rows = f.sheets[f.sheet] || [];
+  let headerRow = 0, best = 0;
+  for (let i = 0; i < Math.min(15, rows.length); i++) {
+    const n = (rows[i] || []).filter(c => Object.keys(SYN).some(k => headerScore(c, k) > 0)).length;
+    if (n > best) { best = n; headerRow = i; }
+  }
+  f.headerRow = headerRow;
+  const width = Math.max(0, ...rows.slice(0, 50).map(r => r.length));
+  f.headers = Array.from({ length: width }, (_, i) => cellToString((rows[headerRow] || [])[i]) || `Colonne ${i + 1}`);
+  const m = detectMapping(f.headers, rows, headerRow);
+  f.qtyGuess = m.qtyGuess; delete m.qtyGuess;
+  f.mapping = m;
+}
+
+function guessRole(f) {
+  const n = normText(f.name);
+  const refName = /\b(ref|referentiel|reference|references|catalogue|articles|base|nomenclature|produits)\b/.test(n);
+  const ordName = /\b(commande|commandes|cde|cumul|cumuls|saisie|bon|bons|releve|mouvement)\b/.test(n);
+  const hasQty = f.mapping.qty != null;
+  if (ordName) return 'orders';
+  if (refName && !hasQty) return 'ref';
+  if (hasQty) return 'orders';
+  if (f.qtyGuess != null && state.files.some(x => x.role === 'ref')) return 'orders';
+  return 'ref';
+}
+
+function addFile(name, sheets) {
+  const names = Object.keys(sheets);
+  const sheet = names.find(n => (sheets[n] || []).length > 1) || names[0];
+  const f = { id: uid('F'), name, sheets, sheetNames: names, sheet, importedAt: new Date().toISOString() };
+  configureFile(f);
+  f.role = guessRole(f);
+  if (f.role === 'orders' && f.mapping.qty == null && f.qtyGuess != null) f.mapping.qty = f.qtyGuess;
+  state.files.push(f);
+  syncFile(f);
+  log('info', `Fichier importé : « ${name} » → ${ROLE_LABEL[f.role]} (${f.count} ligne(s) exploitée(s)${names.length > 1 ? `, feuille « ${sheet} »` : ''}).`);
+  return f;
+}
+
+// (Ré)extrait les données d'un fichier selon son rôle et son mappage
+function syncFile(f) {
+  state.lines = state.lines.filter(l => l.fileId !== f.id);
+  if (!f.sheets) { rebuildRef(); return; }
+  const rows = f.sheets[f.sheet] || [], m = f.mapping;
+  const get = (r, k) => (m[k] != null ? r[m[k]] : '');
+  const short = f.name.length > 22 ? f.name.slice(0, 20) + '…' : f.name;
+  f.refEntries = []; f.count = 0;
+  if (f.role === 'ref') {
+    for (let i = f.headerRow + 1; i < rows.length; i++) {
+      const r = rows[i] || []; const code = normCode(get(r, 'code'));
+      if (!code) continue;
+      const s = parseNum(get(r, 'seuil'));
+      f.refEntries.push({ code, designation: cellToString(get(r, 'designation')), unit: cellToString(get(r, 'unit')), seuil: Number.isFinite(s) ? s : null, src: `${short} · L${i + 1}` });
+    }
+    f.count = f.refEntries.length;
+  } else if (f.role === 'orders') {
+    const fresh = [];
+    for (let i = f.headerRow + 1; i < rows.length; i++) {
+      const r = rows[i] || [];
+      const rawCode = get(r, 'code'), rawQty = get(r, 'qty');
+      if (cellToString(rawCode) === '' && cellToString(rawQty) === '') continue;
+      fresh.push({
+        id: uid('L'), fileId: f.id, src: `${short} · L${i + 1}`,
+        code: normCode(rawCode), designation: cellToString(get(r, 'designation')),
+        qtyRaw: cellToString(rawQty), qty: parseNum(rawQty),
+        unit: cellToString(get(r, 'unit')), piece: cellToString(get(r, 'piece')),
+        ack: {}, edited: false
+      });
+    }
+    state.lines.push(...fresh);
+    f.count = fresh.length;
+  }
+  rebuildRef();
+}
+
+function rebuildRef() {
+  state.ref = new Map(); sugCache.clear();
+  const dupes = [];
+  state.files.filter(f => f.role === 'ref').forEach(f => (f.refEntries || []).forEach(e => {
+    if (state.ref.has(e.code)) dupes.push(e.code); else state.ref.set(e.code, e);
+  }));
+  state.refDupes = [...new Set(dupes)];
+}
+
+function fileStatus(f) {
+  if (f.role === 'ignore') return { ok: null, msg: 'Fichier ignoré' };
+  if (f.mapping.code == null) return { ok: false, msg: 'Colonne « code article » introuvable' };
+  if (f.role === 'orders' && f.mapping.qty == null) return { ok: false, msg: 'Colonne « quantité » introuvable' };
+  if (!f.count) return { ok: false, msg: 'Aucune ligne exploitable' };
+  return { ok: true, msg: 'Fichier valide' };
+}
+
+/* ---------------------------- Suggestions de références ---------------------------- */
+function suggest(code) {
+  if (sugCache.has(code)) return sugCache.get(code);
+  const ref = state.ref; let best = null;
+  const stripped = code.replace(/^0+/, '');
+  if (stripped) for (const k of ref.keys()) if (k !== code && k.replace(/^0+/, '') === stripped) { best = { code: k, reason: 'zéros non significatifs supprimés par Excel' }; break; }
+  if (!best) for (let i = 0; i < code.length - 1; i++) {
+    if (code[i] === code[i + 1]) continue;
+    const t = code.slice(0, i) + code[i + 1] + code[i] + code.slice(i + 2);
+    if (ref.has(t)) { best = { code: t, reason: `inversion de chiffres probable « ${code[i]}${code[i + 1]} » → « ${code[i + 1]}${code[i]} »` }; break; }
+  }
+  if (!best && code.length >= 4) {
+    let bd = 3;
+    for (const k of ref.keys()) {
+      if (Math.abs(k.length - code.length) > 2) continue;
+      const d = levenshtein(code, k, bd);
+      if (d < bd) { bd = d; best = { code: k, reason: d === 1 ? 'un caractère diffère (faute de frappe probable)' : 'deux caractères diffèrent' }; if (d === 1) break; }
+    }
+  }
+  sugCache.set(code, best);
+  return best;
+}
+
+/* ---------------------------- Moteur d'analyse ---------------------------- */
+function analyze() {
+  const S = state.settings, ref = state.ref, hasRef = ref.size > 0;
+  const issues = new Map(); state.lines.forEach(l => issues.set(l.id, []));
+  const add = (l, iss) => { iss.acked = iss.ack ? !!(l.ack && l.ack[iss.ack]) : false; issues.get(l.id).push(iss); };
+  const byCode = new Map(), dupMap = new Map();
+
+  for (const l of state.lines) {
+    // 1. Référence
+    if (!l.code) add(l, { type: 'code', sev: 'error', msg: 'Code article manquant : saisissez la référence Intelix de cette ligne.' });
+    else if (hasRef && !ref.has(l.code)) {
+      const s = suggest(l.code);
+      add(l, {
+        type: 'unknown', sev: 'error',
+        msg: `Référence « ${l.code} » absente du fichier de référence.` + (s ? ` Vouliez-vous dire ${s.code} – ${ref.get(s.code).designation || 'sans désignation'} ? (${s.reason})` : ' Vérifiez la saisie ou complétez le référentiel.'),
+        fix: s ? { code: s.code } : null
+      });
+    }
+    // 2. Quantité
+    if (l.qty === null) add(l, { type: 'qty', sev: 'error', msg: 'Quantité manquante : indiquez la quantité à saisir dans Intelix.' });
+    else if (Number.isNaN(l.qty)) add(l, { type: 'qty', sev: 'error', msg: `Quantité non numérique (« ${l.qtyRaw} ») : vérifiez la présence d'une lettre (O/0, l/1) ou d'un caractère parasite.` });
+    else if (l.qty <= 0) add(l, { type: 'qty', sev: 'error', msg: `Quantité ${l.qty < 0 ? 'négative' : 'nulle'} (${fmt(l.qty)}) : une saisie Intelix exige une quantité strictement positive.` });
+    else if (S.lineMax > 0 && l.qty > S.lineMax) add(l, { type: 'linemax', sev: 'warn', ack: 'linemax', msg: `Quantité ${fmt(l.qty)} supérieure au maximum autorisé par ligne (${fmt(S.lineMax)}).` });
+    // 3. Désignation incohérente (mauvais article sélectionné)
+    if (S.desigCheck && l.code && ref.has(l.code) && l.designation) {
+      const rd = ref.get(l.code).designation;
+      if (rd && similarity(l.designation, rd) < 0.45)
+        add(l, { type: 'desig', sev: 'warn', ack: 'desig', msg: `Désignation saisie « ${l.designation} » ≠ référentiel « ${rd} » pour le code ${l.code} : mauvais article sélectionné ?` });
+    }
+    // 4. Doublons
+    if (l.code && Number.isFinite(l.qty)) {
+      const k = `${l.code}|${l.qty}|${normText(l.piece)}`;
+      const first = dupMap.get(k);
+      if (first) add(l, { type: 'dup', sev: S.dupBlocking ? 'error' : 'warn', ack: 'dup', dupOf: first.id, msg: `Doublon probable de la ligne ${first.src} (même article ${l.code}, même quantité ${fmt(l.qty)}${l.piece ? `, même pièce ${l.piece}` : ''}). Supprimez-le ou confirmez qu'il s'agit d'une saisie distincte.` });
+      else dupMap.set(k, l);
+    }
+    if (l.code && Number.isFinite(l.qty) && l.qty > 0) {
+      if (!byCode.has(l.code)) byCode.set(l.code, []);
+      byCode.get(l.code).push(l);
+    }
+  }
+
+  // 5. Saisies aberrantes (écart à la médiane de l'article)
+  for (const [code, ls] of byCode) {
+    if (ls.length < 3) continue;
+    const med = median(ls.map(l => l.qty));
+    if (med > 0) ls.forEach(l => {
+      if (l.qty >= S.outlierFactor * med)
+        add(l, { type: 'outlier', sev: 'warn', ack: 'outlier', msg: `Saisie aberrante probable : ${fmt(l.qty)} alors que la médiane des saisies pour ${code} est ${fmt(med)} (×${fmt(l.qty / med, 1)}). Zéro en trop ou inversion de chiffres ?` });
+    });
+  }
+
+  // 6. Cumuls & seuils
+  const cumuls = new Map();
+  for (const [code, ls] of byCode) {
+    const r = ref.get(code);
+    const total = ls.reduce((s, l) => s + l.qty, 0);
+    const refSeuil = r && Number.isFinite(r.seuil) && r.seuil > 0 ? r.seuil : null;
+    const seuil = refSeuil ?? (S.seuil > 0 ? S.seuil : null);
+    const pct = seuil ? (total / seuil) * 100 : 0;
+    const status = seuil && total > seuil ? 'over' : seuil && pct >= S.alertPct ? 'near' : 'ok';
+    const forced = state.forced.has(code);
+    const c = {
+      code, total, count: ls.length, seuil, seuilSrc: refSeuil ? 'référentiel' : 'global', pct, status, forced,
+      designation: r?.designation || ls.find(l => l.designation)?.designation || '',
+      unit: r?.unit || ls.find(l => l.unit)?.unit || '',
+      known: !hasRef || !!r, lineIds: ls.map(l => l.id)
+    };
+    c.blocking = status === 'over' && !forced && S.seuilBlocking;
+    if (status === 'over') {
+      const msg = `Attention : le cumul pour ${code}${c.designation ? ` (${c.designation})` : ''} dépasse le seuil max défini (${fmt(total)} vs ${fmt(seuil)}).`;
+      ls.forEach(l => issues.get(l.id).push({ type: 'seuil', sev: S.seuilBlocking ? 'error' : 'warn', articleLevel: true, code, acked: forced, msg: forced ? msg + ' Dépassement forcé manuellement.' : msg + ' Corrigez une quantité ou forcez le dépassement si justifié.' }));
+    }
+    cumuls.set(code, c);
+  }
+
+  // 7. Statistiques globales
+  let lineBlocking = 0, warnings = 0, readyLines = 0;
+  for (const l of state.lines) {
+    const open = issues.get(l.id).filter(i => !i.acked);
+    lineBlocking += open.filter(i => i.sev === 'error' && !i.articleLevel).length;
+    warnings += open.filter(i => i.sev === 'warn' && !i.articleLevel).length;
+    l._ready = !open.some(i => i.sev === 'error');
+    l._state = open.some(i => i.sev === 'error') ? 'error' : open.some(i => i.sev === 'warn') ? 'warn' : 'ok';
+    if (l._ready) readyLines++;
+  }
+  let articleBlocking = 0;
+  for (const c of cumuls.values()) {
+    c.lineErrors = c.lineIds.filter(id => issues.get(id).some(i => !i.acked && i.sev === 'error' && !i.articleLevel)).length;
+    c.lineWarns = c.lineIds.filter(id => issues.get(id).some(i => !i.acked && i.sev === 'warn' && !i.articleLevel)).length;
+    c.ready = !c.blocking && c.lineErrors === 0 && c.known;
+    c._state = !c.ready ? 'error' : (c.status !== 'ok' && !c.forced) || c.lineWarns ? 'warn' : 'ok';
+    if (c.blocking) articleBlocking++;
+    else if (c.status !== 'ok' && !c.forced) warnings++;
+  }
+  const total = [...cumuls.values()].reduce((s, c) => s + c.total, 0);
+  const sig = hash([...cumuls.values()].sort((a, b) => a.code.localeCompare(b.code)).map(c => `${c.code}:${c.total}`).join('|'));
+  A = {
+    issues, cumuls,
+    stats: {
+      lines: state.lines.length, articles: cumuls.size, blocking: lineBlocking + articleBlocking, lineBlocking, articleBlocking,
+      warnings, readyLines, total, sig, score: state.lines.length ? Math.round((readyLines / state.lines.length) * 100) : 0,
+      readyArticles: [...cumuls.values()].filter(c => c.ready).length
+    }
+  };
+}
+
+/* ---------------------------- Rendu ---------------------------- */
+const BADGE = {
+  error: 'bg-red-100 text-red-700 ring-red-600/20 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-400/30',
+  warn: 'bg-amber-100 text-amber-800 ring-amber-600/20 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-400/30',
+  ok: 'bg-emerald-100 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/30',
+  info: 'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600/40',
+  acked: 'bg-indigo-100 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-400/30'
+};
+const badge = (kind, text, icon) => `<span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset whitespace-nowrap ${BADGE[kind]}">${icon ? `<i data-lucide="${icon}"></i>` : ''}${text}</span>`;
+const STATE_ICON = {
+  error: '<span class="text-red-600 dark:text-red-400 text-lg" title="Erreur bloquante"><i data-lucide="octagon-x"></i></span>',
+  warn: '<span class="text-amber-500 dark:text-amber-400 text-lg" title="Alerte à vérifier"><i data-lucide="alert-triangle"></i></span>',
+  ok: '<span class="text-emerald-600 dark:text-emerald-400 text-lg" title="Prêt pour Intelix"><i data-lucide="check-circle-2"></i></span>'
+};
+const ROW_BG = { error: 'bg-red-50/80 dark:bg-red-950/25', warn: 'bg-amber-50/70 dark:bg-amber-950/20', ok: '' };
+
+function renderAll() {
+  analyze();
+  renderConformity(); renderSources(); renderFiles(); renderKpis(); renderTodo();
+  renderToolbar(); renderTable(); renderExport();
+  icons(); save();
+}
+
+function renderConformity() {
+  const s = A.stats; let cls, icon, title, sub;
+  if (!s.lines) { cls = 'border-slate-300 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300'; icon = 'hourglass'; title = 'En attente de données'; sub = 'Importez un fichier de commandes'; }
+  else if (s.blocking) { cls = 'border-red-300 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300'; icon = 'shield-alert'; title = `${s.blocking} erreur${s.blocking > 1 ? 's' : ''} bloquante${s.blocking > 1 ? 's' : ''} à corriger`; sub = `Conformité ${s.score}% — transfert Intelix bloqué`; }
+  else if (s.warnings) { cls = 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300'; icon = 'shield-question'; title = `100% Conforme — ${s.warnings} alerte${s.warnings > 1 ? 's' : ''} à vérifier`; sub = 'Transfert possible après vérification'; }
+  else { cls = 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300'; icon = 'shield-check'; title = '100% Conforme — Prêt pour transfert'; sub = `${s.articles} article(s), cumul total ${fmt(s.total)}`; }
+  $('#conformityBadge').innerHTML = `<div class="flex items-center gap-3 rounded-xl border px-3 py-2 ${cls}" role="status" aria-live="polite">
+    <span class="text-2xl"><i data-lucide="${icon}"></i></span>
+    <div class="min-w-0"><div class="font-semibold text-sm leading-tight">${title}</div><div class="text-xs opacity-80">${sub}</div></div>
+    ${s.lines ? `<div class="ml-auto pl-2 text-right"><div class="text-xl font-bold num leading-none">${s.score}%</div><div class="text-[10px] uppercase tracking-wide opacity-70">lignes prêtes</div></div>` : ''}
+  </div>`;
+}
+
+function renderSources() {
+  const refFiles = state.files.filter(f => f.role === 'ref'), ordFiles = state.files.filter(f => f.role === 'orders');
+  const chip = (ok, label, detail) => badge(ok ? 'ok' : 'error', `${label} : ${detail}`, ok ? 'check' : 'x');
+  $('#sourceStatus').innerHTML =
+    chip(refFiles.length > 0, 'Référentiel', refFiles.length ? `${state.ref.size} article(s)` : 'manquant') +
+    chip(ordFiles.length > 0 || state.lines.length > 0, 'Commandes', state.lines.length ? `${state.lines.length} ligne(s)` : 'manquant');
+}
+
+function renderFiles() {
+  const box = $('#fileList');
+  if (!state.files.length) {
+    box.innerHTML = `<div class="md:col-span-2 text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2"><i data-lucide="info"></i>Aucun fichier chargé. Astuce : cliquez sur <b class="mx-1">Démo</b> pour tester avec un jeu d'exemple contenant des erreurs typiques.</div>`;
+    if (!state.ref.size) box.innerHTML += `<div class="md:col-span-2 text-xs text-amber-700 dark:text-amber-300">Sans référentiel, le contrôle « article inexistant » est désactivé.</div>`;
+    return;
+  }
+  box.innerHTML = state.files.map(f => {
+    const st = fileStatus(f);
+    const fields = ROLE_FIELDS[f.role] || [];
+    const canEdit = !!f.sheets;
+    const selects = fields.map(k => `<label class="block"><span class="text-[11px] text-slate-500 dark:text-slate-400">${FIELDS[k]}${(k === 'code' || (k === 'qty' && f.role === 'orders')) ? ' *' : ''}</span>
+      <select data-file="${f.id}" data-map="${k}" ${canEdit ? '' : 'disabled'} class="mt-0.5 w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 text-xs">
+        <option value="">— aucune —</option>${f.headers.map((h, i) => `<option value="${i}" ${f.mapping[k] === i ? 'selected' : ''}>${esc(h)}</option>`).join('')}
+      </select></label>`).join('');
+    return `<div class="rounded-xl border ${st.ok === false ? 'border-red-300 dark:border-red-500/40' : 'border-slate-200 dark:border-slate-800'} p-3">
+      <div class="flex items-start gap-3">
+        <div class="h-9 w-9 shrink-0 rounded-lg grid place-items-center text-lg ${f.role === 'ref' ? 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300' : f.role === 'orders' ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}"><i data-lucide="${f.role === 'ref' ? 'book-open' : f.role === 'orders' ? 'shopping-cart' : 'file'}"></i></div>
+        <div class="min-w-0 flex-1">
+          <div class="font-medium text-sm truncate" title="${esc(f.name)}">${esc(f.name)}</div>
+          <div class="mt-1 flex flex-wrap items-center gap-2">
+            ${st.ok === null ? badge('info', st.msg) : badge(st.ok ? 'ok' : 'error', st.msg, st.ok ? 'check' : 'x')}
+            <span class="text-xs text-slate-500 dark:text-slate-400 num">${fmt(f.count || 0)} ligne(s)</span>
+          </div>
+        </div>
+        <button data-remove-file="${f.id}" class="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10" title="Retirer ce fichier"><i data-lucide="trash-2"></i></button>
+      </div>
+      <div class="mt-3 grid grid-cols-2 gap-2">
+        <label class="block"><span class="text-[11px] text-slate-500 dark:text-slate-400">Type de fichier</span>
+          <select data-file="${f.id}" data-role ${canEdit ? '' : 'disabled'} class="mt-0.5 w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 text-xs">
+            ${Object.entries(ROLE_LABEL).map(([k, v]) => `<option value="${k}" ${f.role === k ? 'selected' : ''}>${v}</option>`).join('')}
+          </select></label>
+        ${(f.sheetNames || []).length > 1 ? `<label class="block"><span class="text-[11px] text-slate-500 dark:text-slate-400">Feuille</span>
+          <select data-file="${f.id}" data-sheet class="mt-0.5 w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 text-xs">
+            ${f.sheetNames.map(n => `<option ${n === f.sheet ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>` : ''}
+      </div>
+      ${fields.length ? `<details class="mt-2 group" ${st.ok === false ? 'open' : ''}><summary class="cursor-pointer text-xs text-indigo-600 dark:text-indigo-400 select-none">Colonnes détectées ${canEdit ? '(modifiables)' : '(rechargez le fichier pour modifier)'}</summary>
+        <div class="mt-2 grid grid-cols-2 gap-2">${selects}</div></details>` : ''}
+    </div>`;
+  }).join('');
+  if (state.refDupes?.length) box.innerHTML += `<div class="md:col-span-2 text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2"><i data-lucide="alert-triangle"></i>${state.refDupes.length} code(s) en double dans le référentiel (1re occurrence retenue) : ${esc(state.refDupes.slice(0, 8).join(', '))}${state.refDupes.length > 8 ? '…' : ''}</div>`;
+}
+
+function renderKpis() {
+  const s = A.stats;
+  const tile = (icon, label, value, tone, hint) => `<div class="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+    <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400"><span class="${tone}"><i data-lucide="${icon}"></i></span>${label}</div>
+    <div class="mt-1 text-2xl font-semibold num ${tone}">${value}</div>${hint ? `<div class="text-[11px] text-slate-500 dark:text-slate-400 truncate">${hint}</div>` : ''}</div>`;
+  $('#kpis').innerHTML =
+    tile('rows-3', 'Lignes traitées', fmt(s.lines), '', `${state.files.filter(f => f.role === 'orders').length} fichier(s) de commandes`) +
+    tile('package', 'Articles cumulés', fmt(s.articles), '', `${fmt(s.readyArticles)} prêt(s) pour Intelix`) +
+    tile('sigma', 'Cumul total', fmt(s.total), 'text-indigo-600 dark:text-indigo-400', 'Somme des quantités valides') +
+    tile('octagon-x', 'Erreurs bloquantes', fmt(s.blocking), s.blocking ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400', s.blocking ? `${s.lineBlocking} ligne · ${s.articleBlocking} seuil` : 'Aucune') +
+    tile('alert-triangle', 'Alertes à vérifier', fmt(s.warnings), s.warnings ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400', 'Non bloquantes') +
+    tile('gauge', 'Conformité', s.lines ? s.score + '%' : '—', s.blocking ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400', `${fmt(s.readyLines)} / ${fmt(s.lines)} lignes prêtes`);
+}
+
+function collectOpenIssues() {
+  const out = [];
+  for (const l of state.lines) for (const i of A.issues.get(l.id) || []) if (!i.acked && !i.articleLevel) out.push({ l, i });
+  for (const c of A.cumuls.values()) if (c.status === 'over' && !c.forced) out.push({ c, i: { type: 'seuil', sev: c.blocking ? 'error' : 'warn', msg: `Attention : le cumul pour ${c.code}${c.designation ? ` (${c.designation})` : ''} dépasse le seuil max défini (${fmt(c.total)} vs ${fmt(c.seuil)}).` } });
+  return out.sort((a, b) => (a.i.sev === 'error' ? 0 : 1) - (b.i.sev === 'error' ? 0 : 1));
+}
+
+function renderTodo() {
+  const box = $('#todo');
+  const open = collectOpenIssues();
+  if (!state.lines.length || !open.length) { box.innerHTML = ''; return; }
+  const fixes = open.filter(o => o.i.type === 'unknown' && o.i.fix).length;
+  const dups = open.filter(o => o.i.type === 'dup').length;
+  const top = open.slice(0, 6);
+  box.innerHTML = `<div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 p-3">
+    <div class="flex flex-wrap items-center gap-2 mb-2">
+      <span class="font-semibold text-sm flex items-center gap-2"><i data-lucide="list-checks"></i>À traiter en priorité</span>
+      <span class="text-xs text-slate-500 dark:text-slate-400">${open.length} anomalie(s) ouverte(s)</span>
+      <div class="ml-auto flex flex-wrap gap-2">
+        ${fixes ? `<button data-bulk="fixes" class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-indigo-500"><i data-lucide="wand-2"></i>Appliquer les ${fixes} suggestion(s) de référence</button>` : ''}
+        ${dups ? `<button data-bulk="dups" class="inline-flex items-center gap-1.5 rounded-lg border border-red-300 text-red-700 dark:border-red-500/40 dark:text-red-300 px-3 py-1.5 text-xs font-semibold hover:bg-red-50 dark:hover:bg-red-500/10"><i data-lucide="copy-x"></i>Supprimer les ${dups} doublon(s)</button>` : ''}
+      </div>
+    </div>
+    <ul class="space-y-1.5">${top.map(({ l, c, i }) => `<li class="flex items-start gap-2 text-sm">
+      <span class="mt-0.5 ${i.sev === 'error' ? 'text-red-600 dark:text-red-400' : 'text-amber-500'}"><i data-lucide="${i.sev === 'error' ? 'octagon-x' : 'alert-triangle'}"></i></span>
+      <span class="flex-1">${l ? `<span class="font-mono text-xs text-slate-500 dark:text-slate-400 mr-1">${esc(l.src)}</span>` : ''}${esc(i.msg)}</span>
+      <button data-goto="${esc(l ? (l.code || l.src) : c.code)}" data-goto-view="${l ? 'lines' : 'cumuls'}" class="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap">Afficher</button></li>`).join('')}
+    </ul>${open.length > top.length ? `<p class="text-xs text-slate-500 dark:text-slate-400 mt-2">… et ${open.length - top.length} autre(s). Filtre « Anomalies » pour tout voir.</p>` : ''}
+  </div>`;
+}
+
+function renderToolbar() {
+  document.querySelectorAll('.view-btn').forEach(b => {
+    const on = b.dataset.view === state.ui.view;
+    b.className = `view-btn rounded-md px-3 py-1.5 font-medium inline-flex items-center gap-1.5 ${on ? 'bg-white dark:bg-slate-950 shadow-sm text-indigo-700 dark:text-indigo-300' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`;
+  });
+  const items = state.ui.view === 'lines' ? state.lines.map(l => l._state) : [...A.cumuls.values()].map(c => c._state);
+  const counts = { all: items.length, errors: items.filter(s => s !== 'ok').length, ready: state.ui.view === 'lines' ? state.lines.filter(l => l._ready).length : [...A.cumuls.values()].filter(c => c.ready).length };
+  const defs = [['all', 'Tout', 'layers'], ['errors', 'Anomalies', 'alert-octagon'], ['ready', 'Prêt pour Intelix', 'check-check']];
+  $('#filters').innerHTML = defs.map(([k, label, icon]) => {
+    const on = state.ui.filter === k;
+    const tone = on ? (k === 'errors' ? 'bg-red-600 text-white border-red-600' : k === 'ready' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-indigo-600 text-white border-indigo-600') : 'border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800';
+    return `<button data-filter="${k}" class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-medium ${tone}"><i data-lucide="${icon}"></i>${label}<span class="num rounded-full px-1.5 text-xs ${on ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-800'}">${counts[k]}</span></button>`;
+  }).join('');
+  $('#errorsFirst').checked = state.ui.errorsFirst;
+  if ($('#search').value !== state.ui.search) $('#search').value = state.ui.search;
+}
+
+function matchSearch(...vals) {
+  const q = normText(state.ui.search);
+  if (!q) return true;
+  const hay = normText(vals.join(' '));
+  return q.split(' ').every(t => hay.includes(t));
+}
+
+const SEV_RANK = { error: 0, warn: 1, ok: 2 };
+function visibleItems() {
+  const f = state.ui.filter;
+  if (state.ui.view === 'lines') {
+    let ls = state.lines.filter(l => (f === 'all' || (f === 'errors' ? l._state !== 'ok' : l._ready)) &&
+      matchSearch(l.code, l.designation, state.ref.get(l.code)?.designation, l.piece, l.src));
+    if (state.ui.errorsFirst) ls = ls.map((l, i) => [l, i]).sort((a, b) => SEV_RANK[a[0]._state] - SEV_RANK[b[0]._state] || a[1] - b[1]).map(x => x[0]);
+    return ls;
+  }
+  let cs = [...A.cumuls.values()].filter(c => (f === 'all' || (f === 'errors' ? c._state !== 'ok' : c.ready)) && matchSearch(c.code, c.designation));
+  cs.sort((a, b) => (state.ui.errorsFirst ? SEV_RANK[a._state] - SEV_RANK[b._state] : 0) || a.code.localeCompare(b.code, 'fr', { numeric: true }));
+  return cs;
+}
+
+function renderTable() {
+  const tbl = $('#dataTable');
+  const items = visibleItems();
+  const ps = state.ui.pageSize, pages = Math.max(1, Math.ceil(items.length / ps));
+  if (state.ui.page > pages) state.ui.page = pages;
+  const pageItems = items.slice((state.ui.page - 1) * ps, state.ui.page * ps);
+  const th = 'px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 whitespace-nowrap';
+
+  if (state.ui.view === 'lines') {
+    tbl.innerHTML = `<thead class="bg-slate-50 dark:bg-slate-800/60"><tr>
+      <th class="${th} w-10"></th><th class="${th}">Source / pièce</th><th class="${th} min-w-[150px]">Code article</th><th class="${th} min-w-[200px]">Désignation (référentiel)</th>
+      <th class="${th} min-w-[110px] text-right">Quantité</th><th class="${th}">Cumul article</th><th class="${th} w-24 text-right">Actions</th></tr></thead>` +
+      (pageItems.length ? pageItems.map(lineRows).join('') : emptyRow(7));
+  } else {
+    tbl.innerHTML = `<thead class="bg-slate-50 dark:bg-slate-800/60"><tr>
+      <th class="${th} w-10"></th><th class="${th}">Code article</th><th class="${th} min-w-[200px]">Désignation</th><th class="${th} text-right">Lignes</th>
+      <th class="${th} text-right">Cumul</th><th class="${th} text-right">Seuil</th><th class="${th} min-w-[160px]">Taux / statut</th><th class="${th} text-right">Actions</th></tr></thead>` +
+      (pageItems.length ? pageItems.map(cumulRows).join('') : emptyRow(8));
+  }
+
+  $('#pager').innerHTML = `<span class="num">${items.length ? `${(state.ui.page - 1) * ps + 1}–${Math.min(state.ui.page * ps, items.length)} sur ${fmt(items.length)}` : '0 élément'}</span>
+    <label class="inline-flex items-center gap-2">par page <select id="pageSize" class="rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1">${[25, 50, 100, 250].map(n => `<option ${n === ps ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+    <div class="ml-auto inline-flex gap-1">
+      <button data-page="${state.ui.page - 1}" ${state.ui.page <= 1 ? 'disabled' : ''} class="rounded-md border border-slate-300 dark:border-slate-700 px-2 py-1 disabled:opacity-40"><i data-lucide="chevron-left"></i></button>
+      <span class="px-2 py-1 num">Page ${state.ui.page} / ${pages}</span>
+      <button data-page="${state.ui.page + 1}" ${state.ui.page >= pages ? 'disabled' : ''} class="rounded-md border border-slate-300 dark:border-slate-700 px-2 py-1 disabled:opacity-40"><i data-lucide="chevron-right"></i></button>
+    </div>`;
+
+  icons();
+  if (pendingFocus) {
+    const el = tbl.querySelector(`input[data-id="${pendingFocus.id}"][data-field="${pendingFocus.field}"]`);
+    if (el) { el.focus(); el.select(); }
+    pendingFocus = null;
+  }
+}
+
+function emptyRow(n) {
+  const msg = !state.lines.length ? 'Aucune donnée. Importez un fichier de commandes ou chargez la démo.' : state.ui.filter === 'ready' ? 'Aucun élément prêt pour Intelix : corrigez les anomalies.' : state.ui.filter === 'errors' ? 'Aucune anomalie — tout est conforme.' : 'Aucun résultat pour cette recherche.';
+  return `<tbody><tr><td colspan="${n}" class="px-3 py-10 text-center text-slate-500 dark:text-slate-400">${esc(msg)}</td></tr></tbody>`;
+}
+
+function cumulBadge(c) {
+  if (!c) return '<span class="text-xs text-slate-400">—</span>';
+  const kind = c.status === 'over' ? (c.forced ? 'acked' : c.blocking ? 'error' : 'warn') : c.status === 'near' ? 'warn' : 'ok';
+  return badge(kind, `<span class="num">${fmt(c.total)}${c.seuil ? ` / ${fmt(c.seuil)}` : ''}</span>`, c.status === 'over' ? (c.forced ? 'lock-open' : 'trending-up') : null);
+}
+
+function issueList(iss, l) {
+  return `<ul class="space-y-1">${iss.map(i => {
+    const tone = i.acked ? 'text-indigo-700 dark:text-indigo-300' : i.sev === 'error' ? 'text-red-700 dark:text-red-300' : 'text-amber-800 dark:text-amber-300';
+    const icon = i.acked ? 'shield-check' : i.sev === 'error' ? 'octagon-x' : 'alert-triangle';
+    const btn = 'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset';
+    let actions = '';
+    if (!i.acked) {
+      if (i.fix) actions += `<button data-act="fix" data-id="${l.id}" data-code="${esc(i.fix.code)}" class="${btn} bg-indigo-600 text-white ring-indigo-600 hover:bg-indigo-500"><i data-lucide="wand-2"></i>Remplacer par ${esc(i.fix.code)}</button>`;
+      if (i.type === 'dup') actions += `<button data-act="del" data-id="${l.id}" class="${btn} ring-red-300 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/10"><i data-lucide="trash-2"></i>Supprimer ce doublon</button>`;
+      if (i.ack) actions += `<button data-act="ack" data-id="${l.id}" data-type="${i.ack}" class="${btn} ring-slate-300 dark:ring-slate-600 hover:bg-white dark:hover:bg-slate-800"><i data-lucide="check"></i>${i.type === 'dup' ? 'Saisie distincte, conserver' : 'Vérifié, conserver'}</button>`;
+      if (i.type === 'seuil') actions += `<button data-act="force" data-code="${esc(i.code)}" class="${btn} ring-slate-300 dark:ring-slate-600 hover:bg-white dark:hover:bg-slate-800"><i data-lucide="lock-open"></i>Forcer le dépassement</button>`;
+    } else {
+      if (i.ack) actions += `<button data-act="unack" data-id="${l.id}" data-type="${i.ack}" class="text-xs underline text-indigo-600 dark:text-indigo-400">annuler</button>`;
+      if (i.type === 'seuil') actions += `<button data-act="unforce" data-code="${esc(i.code)}" class="text-xs underline text-indigo-600 dark:text-indigo-400">annuler le forçage</button>`;
+    }
+    return `<li class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs ${tone}"><i data-lucide="${icon}"></i><span class="${i.acked ? 'line-through decoration-indigo-300/60' : ''}">${esc(i.msg)}</span>${i.acked ? '<span class="font-semibold">— validé manuellement</span>' : ''}${actions}</li>`;
+  }).join('')}</ul>`;
+}
+
+function lineRows(l) {
+  const iss = A.issues.get(l.id) || [];
+  const r = state.ref.get(l.code), c = A.cumuls.get(l.code);
+  const codeErr = iss.some(i => !i.acked && (i.type === 'unknown' || i.type === 'code'));
+  const qtyErr = iss.some(i => !i.acked && (i.type === 'qty' || i.type === 'outlier' || i.type === 'linemax'));
+  const inputCls = bad => `cell-input rounded-md border px-2 py-1.5 bg-white dark:bg-slate-950 focus:ring-2 focus:ring-indigo-500 ${bad ? 'border-red-400 dark:border-red-500/60 text-red-700 dark:text-red-300' : 'border-slate-300 dark:border-slate-700'}`;
+  const qtyVal = l.qty === null ? '' : Number.isNaN(l.qty) ? l.qtyRaw : fmtInput(l.qty);
+  const des = r ? esc(r.designation || '—') : (l.designation ? `<span class="italic text-slate-500">${esc(l.designation)}</span>` : '<span class="text-slate-400">—</span>');
+  const typed = r && l.designation && normText(l.designation) !== normText(r.designation) ? `<div class="text-[11px] text-slate-500 dark:text-slate-400 truncate" title="Désignation saisie">saisi : ${esc(l.designation)}</div>` : '';
+  return `<tbody class="border-t border-slate-200 dark:border-slate-800 ${ROW_BG[l._state]}" data-row="${l.id}">
+    <tr>
+      <td class="px-3 py-2 align-top pt-3">${STATE_ICON[l._state]}</td>
+      <td class="px-3 py-2 align-top"><div class="font-mono text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(l.src)}${l.edited ? ' <span class="text-indigo-500" title="Modifiée manuellement">✎</span>' : ''}</div><div class="text-xs font-medium">${esc(l.piece || '')}</div></td>
+      <td class="px-3 py-2 align-top"><input data-id="${l.id}" data-field="code" value="${esc(l.code)}" spellcheck="false" autocomplete="off" class="${inputCls(codeErr)} font-mono uppercase" aria-label="Code article"></td>
+      <td class="px-3 py-2 align-top pt-3"><div class="max-w-[340px]">${des}${r?.unit ? ` <span class="text-xs text-slate-500">(${esc(r.unit)})</span>` : ''}${typed}</div></td>
+      <td class="px-3 py-2 align-top"><input data-id="${l.id}" data-field="qty" value="${esc(qtyVal)}" inputmode="decimal" autocomplete="off" class="${inputCls(qtyErr)} text-right num font-semibold" aria-label="Quantité"></td>
+      <td class="px-3 py-2 align-top pt-3">${cumulBadge(c)}</td>
+      <td class="px-3 py-2 align-top pt-2.5 text-right whitespace-nowrap">
+        <button data-act="copyline" data-id="${l.id}" class="p-1.5 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10" title="Copier code ⇥ quantité"><i data-lucide="copy"></i></button>
+        <button data-act="del" data-id="${l.id}" class="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10" title="Supprimer la ligne"><i data-lucide="trash-2"></i></button>
+      </td>
+    </tr>
+    ${iss.length ? `<tr><td></td><td colspan="6" class="px-3 pb-3 pt-0">${issueList(iss, l)}</td></tr>` : ''}
+  </tbody>`;
+}
+
+function cumulRows(c) {
+  const pct = Math.min(100, c.pct);
+  const bar = c.status === 'over' ? (c.forced ? 'bg-indigo-500' : 'bg-red-500') : c.status === 'near' ? 'bg-amber-500' : 'bg-emerald-500';
+  const notes = [];
+  if (!c.known) notes.push(badge('error', 'Article non référencé', 'x'));
+  if (c.lineErrors) notes.push(badge('error', `${c.lineErrors} ligne(s) en erreur`, 'octagon-x'));
+  if (c.lineWarns) notes.push(badge('warn', `${c.lineWarns} ligne(s) à vérifier`, 'alert-triangle'));
+  if (c.status === 'over') notes.push(c.forced ? badge('acked', 'Dépassement forcé', 'lock-open') : badge(c.blocking ? 'error' : 'warn', `Seuil dépassé de ${fmt(c.total - c.seuil)}`, 'trending-up'));
+  else if (c.status === 'near') notes.push(badge('warn', `Proche du seuil (${fmt(c.pct, 0)}%)`, 'gauge'));
+  if (!notes.length) notes.push(badge('ok', 'Prêt pour Intelix', 'check'));
+  const ib = 'p-1.5 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10';
+  return `<tbody class="border-t border-slate-200 dark:border-slate-800 ${ROW_BG[c._state]}">
+    <tr>
+      <td class="px-3 py-2.5">${STATE_ICON[c._state]}</td>
+      <td class="px-3 py-2.5 font-mono font-semibold whitespace-nowrap">${esc(c.code)}</td>
+      <td class="px-3 py-2.5">${esc(c.designation || '—')}${c.unit ? ` <span class="text-xs text-slate-500">(${esc(c.unit)})</span>` : ''}</td>
+      <td class="px-3 py-2.5 text-right num">${c.count}</td>
+      <td class="px-3 py-2.5 text-right num text-base font-bold">${fmt(c.total)}</td>
+      <td class="px-3 py-2.5 text-right num text-slate-500 dark:text-slate-400" title="Seuil ${c.seuilSrc}">${c.seuil ? fmt(c.seuil) : '—'}<div class="text-[10px]">${c.seuil ? c.seuilSrc : ''}</div></td>
+      <td class="px-3 py-2.5"><div class="h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden mb-1.5"><div class="h-full ${bar}" style="width:${c.seuil ? pct : 0}%"></div></div><div class="flex flex-wrap gap-1">${notes.join('')}</div></td>
+      <td class="px-3 py-2.5 text-right whitespace-nowrap">
+        <button data-act="copytext" data-text="${esc(c.code)}" class="${ib}" title="Copier le code"><i data-lucide="hash"></i></button>
+        <button data-act="copytext" data-text="${esc(fmtInput(c.total))}" class="${ib}" title="Copier la quantité cumulée"><i data-lucide="clipboard-copy"></i></button>
+        ${c.status === 'over' ? (c.forced ? `<button data-act="unforce" data-code="${esc(c.code)}" class="${ib}" title="Annuler le forçage"><i data-lucide="lock"></i></button>` : `<button data-act="force" data-code="${esc(c.code)}" class="${ib}" title="Forcer le dépassement de seuil"><i data-lucide="lock-open"></i></button>`) : ''}
+        <button data-goto="${esc(c.code)}" data-goto-view="lines" class="${ib}" title="Voir les lignes de cet article"><i data-lucide="list"></i></button>
+      </td>
+    </tr>
+  </tbody>`;
+}
+
+function renderExport() {
+  const S = state.settings, s = A.stats;
+  // Colonnes
+  const colDefs = S.exportMode === 'cumul' ? ['code', 'designation', 'qty', 'unit'] : ['piece', 'code', 'designation', 'qty', 'unit'];
+  $('#exportCols').innerHTML = colDefs.map(k => {
+    const fixed = k === 'code' || k === 'qty';
+    return `<div class="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-800 px-2 py-1.5">
+      <input type="checkbox" data-col="${k}" ${fixed ? 'checked disabled' : S.cols[k] ? 'checked' : ''} class="h-4 w-4 accent-indigo-600" title="${fixed ? 'Colonne obligatoire' : 'Inclure la colonne'}">
+      <span class="text-[11px] text-slate-500 dark:text-slate-400 w-20 shrink-0">${FIELDS[k]}${k === 'qty' && S.exportMode === 'cumul' ? ' cumulée' : ''}</span>
+      <input data-label="${k}" value="${esc(S.labels[k])}" class="min-w-0 flex-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 text-xs font-mono"></div>`;
+  }).join('');
+  document.querySelectorAll('[data-setting]').forEach(el => {
+    const v = S[el.dataset.setting];
+    if (el.type === 'checkbox') el.checked = !!v;
+    else if (document.activeElement !== el) el.value = el.dataset.setting === 'sep' && v === '\t' ? '\\t' : v;
+  });
+  const exp = buildExport(false);
+  const all = A.stats.blocking === 0;
+  const valid = state.validated && state.validated.sig === s.sig;
+  $('#exportSummary').innerHTML = !s.lines ? '<div class="text-slate-500 dark:text-slate-400">Aucune donnée à exporter.</div>' : `
+    <div class="flex items-center gap-2 font-semibold mb-2">${all ? '<span class="text-emerald-600 dark:text-emerald-400"><i data-lucide="check-circle-2"></i></span>Données prêtes pour Intelix' : '<span class="text-red-600 dark:text-red-400"><i data-lucide="octagon-x"></i></span>Export complet bloqué'}</div>
+    <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+      <dt class="text-slate-500 dark:text-slate-400">Lignes de fichier</dt><dd class="num font-medium text-right">${fmt(exp.rows.length)}</dd>
+      <dt class="text-slate-500 dark:text-slate-400">Quantité totale exportée</dt><dd class="num font-medium text-right">${fmt(exp.total)}</dd>
+      <dt class="text-slate-500 dark:text-slate-400">Éléments exclus (non conformes)</dt><dd class="num font-medium text-right ${exp.excluded ? 'text-red-600 dark:text-red-400' : ''}">${fmt(exp.excluded)}</dd>
+      <dt class="text-slate-500 dark:text-slate-400">Empreinte des cumuls</dt><dd class="font-mono text-right">#${s.sig}</dd>
+    </dl>
+    ${!all ? `<p class="mt-2 text-xs text-red-700 dark:text-red-300">${s.blocking} erreur(s) bloquante(s). Vous pouvez exporter uniquement les éléments conformes ; les autres resteront à traiter.</p>` : ''}`;
+  $('#btnExportLabel').textContent = !s.lines ? 'Exporter pour Intelix' : all ? `Exporter pour Intelix (${S.exportFormat.toUpperCase()})` : `Exporter les ${exp.rows.length} élément(s) conformes`;
+  $('#btnExport').disabled = !s.lines || !exp.rows.length;
+  $('#validationState').innerHTML = !s.lines ? '' : valid
+    ? badge('ok', `Cumuls validés le ${esc(nowStr(new Date(state.validated.at)))}`, 'badge-check')
+    : state.validated ? badge('warn', 'Données modifiées depuis la dernière validation', 'alert-triangle') : badge('info', 'Cumuls non validés', 'circle-dashed');
+}
+
+function renderLog() {
+  const box = $('#log');
+  $('#logCount').textContent = state.log.length ? `${state.log.length} entrée(s)` : '';
+  if (!state.log.length) { box.innerHTML = '<li class="px-4 py-6 text-center text-slate-500 dark:text-slate-400">Le journal est vide.</li>'; return; }
+  box.innerHTML = state.log.slice(0, 400).map(e => {
+    const [icon, tone] = LOG_STYLE[e.type] || LOG_STYLE.info;
+    return `<li class="px-4 py-2 flex items-start gap-3"><span class="mt-0.5 ${tone}"><i data-lucide="${icon}"></i></span>
+      <time class="font-mono text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap pt-0.5">${esc(nowStr(new Date(e.ts)))}</time>
+      <span class="flex-1 min-w-0 break-words">${esc(e.msg)}</span></li>`;
+  }).join('');
+  icons();
+}
+
+/* ---------------------------- Export ---------------------------- */
+function buildExport(_) {
+  const S = state.settings;
+  const cols = (S.exportMode === 'cumul' ? ['code', 'designation', 'qty', 'unit'] : ['piece', 'code', 'designation', 'qty', 'unit'])
+    .filter(k => k === 'code' || k === 'qty' || S.cols[k]);
+  const rows = []; let total = 0, excluded = 0;
+  if (S.exportMode === 'cumul') {
+    [...A.cumuls.values()].sort((a, b) => a.code.localeCompare(b.code, 'fr', { numeric: true })).forEach(c => {
+      if (!c.ready) { excluded++; return; }
+      rows.push(cols.map(k => k === 'qty' ? c.total : k === 'code' ? c.code : k === 'designation' ? c.designation : c.unit));
+      total += c.total;
+    });
+    // lignes sans cumul possible (quantité invalide) comptent comme exclues
+    excluded += state.lines.filter(l => !l._ready && !A.cumuls.has(l.code)).length;
+  } else {
+    const blockedCodes = new Set([...A.cumuls.values()].filter(c => !c.ready).map(c => c.code));
+    state.lines.forEach(l => {
+      if (!l._ready || !Number.isFinite(l.qty) || blockedCodes.has(l.code)) { excluded++; return; }
+      const r = state.ref.get(l.code);
+      rows.push(cols.map(k => k === 'qty' ? l.qty : k === 'code' ? l.code : k === 'designation' ? (r?.designation || l.designation) : k === 'unit' ? (r?.unit || l.unit) : l.piece));
+      total += l.qty;
+    });
+  }
+  return { cols, header: cols.map(k => S.labels[k] || k.toUpperCase()), rows, total, excluded };
+}
+
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function stamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`; }
+
+function doExport() {
+  analyze();
+  const S = state.settings, s = A.stats;
+  if (!s.lines) return toast('Aucune donnée à exporter.', 'warn');
+  const exp = buildExport();
+  if (!exp.rows.length) return toast('Aucun élément conforme à exporter : corrigez les erreurs bloquantes.', 'error');
+  if (s.blocking && !confirm(`${s.blocking} erreur(s) bloquante(s) subsistent.\n\nExporter UNIQUEMENT les ${exp.rows.length} élément(s) conformes ?\n${exp.excluded} élément(s) non conforme(s) seront exclus du fichier.`)) return;
+  const base = `Intelix_import_${S.exportMode === 'cumul' ? 'cumuls' : 'lignes'}_${stamp()}`;
+  if (S.exportFormat === 'xlsx') {
+    if (!window.XLSX) return toast('Export Excel indisponible (SheetJS non chargé). Utilisez le format CSV.', 'error');
+    const aoa = S.header ? [exp.header, ...exp.rows] : exp.rows;
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = exp.cols.map(k => ({ wch: k === 'designation' ? 40 : 16 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Import Intelix');
+    XLSX.writeFile(wb, base + '.xlsx');
+  } else {
+    const sep = S.sep;
+    const cell = v => {
+      let t = typeof v === 'number' ? String(+v.toFixed(6)).replace('.', S.decimal) : String(v ?? '');
+      return (t.includes(sep) || /["\r\n]/.test(t)) ? `"${t.replace(/"/g, '""')}"` : t;
+    };
+    const lines = (S.header ? [exp.header, ...exp.rows] : exp.rows).map(r => r.map(cell).join(sep));
+    download(new Blob([(S.bom ? '﻿' : '') + lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' }), base + '.csv');
+  }
+  log('export', `Export ${S.exportFormat.toUpperCase()} « ${base} » : ${exp.rows.length} ligne(s), quantité totale ${fmt(exp.total)}${exp.excluded ? `, ${exp.excluded} élément(s) non conforme(s) exclu(s)` : ''} — empreinte #${s.sig}${state.validated?.sig === s.sig ? ' (cumuls validés)' : ' (cumuls non validés)'}.`);
+  toast(`Fichier exporté : ${exp.rows.length} ligne(s).`, 'success');
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {}
+    ta.remove(); return ok;
+  }
+}
+
+async function copyCumuls() {
+  analyze();
+  const ready = [...A.cumuls.values()].filter(c => c.ready).sort((a, b) => a.code.localeCompare(b.code, 'fr', { numeric: true }));
+  if (!ready.length) return toast('Aucun cumul conforme à copier.', 'warn');
+  const f = $('#copyFormat').value;
+  const text = ready.map(c => f === 'qty' ? fmtInput(c.total) : f === 'code-des-qty' ? `${c.code}\t${c.designation}\t${fmtInput(c.total)}` : `${c.code}\t${fmtInput(c.total)}`).join('\r\n');
+  if (await copyText(text)) {
+    const excl = A.cumuls.size - ready.length;
+    toast(`${ready.length} cumul(s) copié(s)${excl ? ` (${excl} non conforme(s) exclu(s))` : ''}.`, 'success');
+    log('export', `Copie presse-papier : ${ready.length} cumul(s), total ${fmt(ready.reduce((s, c) => s + c.total, 0))}${excl ? `, ${excl} exclu(s)` : ''}.`);
+  } else toast('Copie impossible : autorisez l\'accès au presse-papier.', 'error');
+}
+
+function validateCumuls() {
+  analyze();
+  const s = A.stats;
+  if (!s.lines) return toast('Aucune donnée à valider.', 'warn');
+  if (s.blocking) { toast(`Validation impossible : ${s.blocking} erreur(s) bloquante(s) à corriger.`, 'error'); log('warn', `Tentative de validation refusée : ${s.blocking} erreur(s) bloquante(s).`); return; }
+  state.validated = { at: new Date().toISOString(), sig: s.sig, articles: s.articles, total: s.total };
+  log('success', `Cumuls validés : ${s.articles} article(s), ${s.lines} ligne(s), quantité totale ${fmt(s.total)}${s.warnings ? `, ${s.warnings} alerte(s) vérifiée(s)` : ''} — empreinte #${s.sig}.`);
+  toast('Cumuls validés et tracés dans le journal.', 'success');
+  renderAll();
+}
+
+/* ---------------------------- Actions sur les lignes ---------------------------- */
+const findLine = id => state.lines.find(l => l.id === id);
+
+function commitEdit(input) {
+  const l = findLine(input.dataset.id); if (!l) return false;
+  const field = input.dataset.field;
+  if (field === 'code') {
+    const v = normCode(input.value);
+    if (v === l.code) { input.value = l.code; return false; }
+    log('edit', `${l.src} : code article modifié « ${l.code || '∅'} » → « ${v || '∅'} »${state.ref.get(v) ? ` (${state.ref.get(v).designation})` : ''}.`);
+    l.code = v; l.ack = {};
+  } else {
+    const raw = input.value.trim(), q = parseNum(raw);
+    const same = (q === null && l.qty === null) || (Number.isNaN(q) && Number.isNaN(l.qty) && raw === l.qtyRaw) || (Number.isFinite(q) && q === l.qty);
+    if (same) return false;
+    log('edit', `${l.src} : quantité modifiée ${l.qty === null ? '∅' : Number.isNaN(l.qty) ? `« ${l.qtyRaw} »` : fmt(l.qty)} → ${q === null ? '∅' : Number.isNaN(q) ? `« ${raw} »` : fmt(q)}${l.code ? ` (article ${l.code})` : ''}.`);
+    l.qty = q; l.qtyRaw = raw; delete l.ack.outlier; delete l.ack.linemax; delete l.ack.dup;
+  }
+  l.edited = true;
+  return true;
+}
+
+function deleteLine(id, silent) {
+  const idx = state.lines.findIndex(l => l.id === id); if (idx < 0) return;
+  const [l] = state.lines.splice(idx, 1);
+  if (!silent) {
+    lastDeleted = { l, idx };
+    log('edit', `${l.src} : ligne supprimée (article ${l.code || '∅'}, quantité ${Number.isFinite(l.qty) ? fmt(l.qty) : l.qtyRaw || '∅'}).`);
+    toast(`Ligne ${l.src} supprimée.`, 'info', { label: 'Annuler', fn: () => {
+      state.lines.splice(Math.min(lastDeleted.idx, state.lines.length), 0, lastDeleted.l);
+      log('edit', `${lastDeleted.l.src} : suppression annulée.`); lastDeleted = null; renderAll();
+    } });
+  }
+}
+
+/* ---------------------------- Événements ---------------------------- */
+function bind() {
+  const dz = $('#dropzone');
+  ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drop-active'); }));
+  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drop-active'); }));
+  dz.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => e.preventDefault());
+  $('#fileInput').addEventListener('change', e => { handleFiles(e.target.files); e.target.value = ''; });
+
+  // Fichiers : rôle, feuille, mappage, suppression
+  $('#fileList').addEventListener('change', e => {
+    const el = e.target, f = state.files.find(x => x.id === el.dataset.file); if (!f) return;
+    const edited = state.lines.filter(l => l.fileId === f.id && l.edited).length;
+    if (edited && !confirm(`${edited} ligne(s) de ce fichier ont été corrigées manuellement. Ces corrections seront perdues. Continuer ?`)) { renderFiles(); icons(); return; }
+    if (el.hasAttribute('data-role')) { const old = f.role; f.role = el.value; if (f.role === 'orders' && f.mapping.qty == null && f.qtyGuess != null) f.mapping.qty = f.qtyGuess; log('info', `« ${f.name} » : type modifié ${ROLE_LABEL[old]} → ${ROLE_LABEL[f.role]}.`); }
+    else if (el.hasAttribute('data-sheet')) { f.sheet = el.value; configureFile(f); log('info', `« ${f.name} » : feuille « ${f.sheet} » sélectionnée.`); }
+    else if (el.dataset.map) { const k = el.dataset.map; const v = el.value === '' ? null : +el.value; for (const kk in f.mapping) if (f.mapping[kk] === v && kk !== k && v != null) f.mapping[kk] = null; f.mapping[k] = v; log('info', `« ${f.name} » : colonne « ${FIELDS[k]} » → ${v == null ? 'aucune' : `« ${f.headers[v]} »`}.`); }
+    syncFile(f); renderAll();
+  });
+  $('#fileList').addEventListener('click', e => {
+    const b = e.target.closest('[data-remove-file]'); if (!b) return;
+    const f = state.files.find(x => x.id === b.dataset.removeFile); if (!f) return;
+    const edited = state.lines.filter(l => l.fileId === f.id && l.edited).length;
+    if (!confirm(`Retirer « ${f.name} » ?${edited ? `\n${edited} ligne(s) corrigée(s) seront perdues.` : ''}`)) return;
+    state.files = state.files.filter(x => x !== f);
+    state.lines = state.lines.filter(l => l.fileId !== f.id);
+    rebuildRef(); log('warn', `Fichier retiré : « ${f.name} ».`); renderAll();
+  });
+
+  // Paramètres
+  document.querySelectorAll('[data-setting]').forEach(el => el.addEventListener('change', () => {
+    const k = el.dataset.setting, old = state.settings[k];
+    let v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? parseNum(el.value) : el.value;
+    if (k === 'sep' && v === '\\t') v = '\t';
+    if (el.type === 'number' && !Number.isFinite(v)) { el.value = old; return toast('Valeur numérique invalide.', 'warn'); }
+    if (v === old) return;
+    state.settings[k] = v;
+    const label = el.closest('label')?.innerText.trim().split('\n')[0] || k;
+    log('info', `Paramètre « ${label} » : ${fmtSetting(old)} → ${fmtSetting(v)}.`);
+    renderAll();
+  }));
+  $('#exportCols').addEventListener('change', e => {
+    const el = e.target;
+    if (el.dataset.col) { state.settings.cols[el.dataset.col] = el.checked; log('info', `Export : colonne « ${FIELDS[el.dataset.col]} » ${el.checked ? 'incluse' : 'retirée'}.`); }
+    if (el.dataset.label) { const old = state.settings.labels[el.dataset.label]; state.settings.labels[el.dataset.label] = el.value.trim() || DEFAULTS.labels[el.dataset.label]; log('info', `Export : en-tête « ${old} » → « ${state.settings.labels[el.dataset.label]} ».`); }
+    renderAll();
+  });
+
+  // Barre d'outils
+  document.querySelectorAll('.view-btn').forEach(b => b.addEventListener('click', () => { state.ui.view = b.dataset.view; state.ui.page = 1; renderToolbar(); renderTable(); save(); }));
+  $('#filters').addEventListener('click', e => { const b = e.target.closest('[data-filter]'); if (!b) return; state.ui.filter = b.dataset.filter; state.ui.page = 1; renderToolbar(); renderTable(); icons(); });
+  let st; $('#search').addEventListener('input', e => { clearTimeout(st); st = setTimeout(() => { state.ui.search = e.target.value; state.ui.page = 1; renderToolbar(); renderTable(); icons(); }, 120); });
+  $('#errorsFirst').addEventListener('change', e => { state.ui.errorsFirst = e.target.checked; renderTable(); save(); });
+  $('#btnAddLine').addEventListener('click', () => {
+    const l = { id: uid('L'), fileId: null, src: `Saisie manuelle ${state.lines.filter(x => !x.fileId).length + 1}`, code: '', designation: '', qtyRaw: '', qty: null, unit: '', piece: '', ack: {}, edited: true };
+    state.lines.unshift(l);
+    Object.assign(state.ui, { view: 'lines', filter: 'all', search: '', page: 1, errorsFirst: false });
+    pendingFocus = { id: l.id, field: 'code' };
+    log('edit', `${l.src} : ligne ajoutée.`); renderAll();
+  });
+  $('#pager').addEventListener('click', e => { const b = e.target.closest('[data-page]'); if (!b || b.disabled) return; state.ui.page = +b.dataset.page; renderTable(); $('#dataTable').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  $('#pager').addEventListener('change', e => { if (e.target.id === 'pageSize') { state.ui.pageSize = +e.target.value; state.ui.page = 1; renderTable(); save(); } });
+
+  // Tableau : édition rapide
+  const tbl = $('#dataTable');
+  tbl.addEventListener('change', e => { if (e.target.matches('input[data-field]') && commitEdit(e.target)) renderAll(); });
+  tbl.addEventListener('keydown', e => {
+    const el = e.target; if (!el.matches('input[data-field]')) return;
+    if (e.key === 'Escape') { const l = findLine(el.dataset.id); el.value = el.dataset.field === 'code' ? l.code : (l.qty === null ? '' : Number.isNaN(l.qty) ? l.qtyRaw : fmtInput(l.qty)); el.blur(); }
+    if (e.key === 'Enter' || (e.key === 'ArrowDown' && e.altKey) || (e.key === 'ArrowUp' && e.altKey)) {
+      e.preventDefault();
+      const inputs = [...tbl.querySelectorAll(`input[data-field="${el.dataset.field}"]`)];
+      const next = inputs[inputs.indexOf(el) + (e.key === 'ArrowUp' || e.shiftKey ? -1 : 1)];
+      if (commitEdit(el)) { pendingFocus = next ? { id: next.dataset.id, field: el.dataset.field } : null; renderAll(); }
+      else if (next) { next.focus(); next.select(); }
+    }
+  });
+  tbl.addEventListener('click', e => onAction(e));
+  $('#todo').addEventListener('click', e => onAction(e));
+
+  // Export & journal
+  $('#btnExport').addEventListener('click', doExport);
+  $('#btnCopy').addEventListener('click', copyCumuls);
+  $('#btnValidate').addEventListener('click', validateCumuls);
+  $('#btnLogExport').addEventListener('click', () => {
+    if (!state.log.length) return toast('Journal vide.', 'warn');
+    const rows = [['Horodatage', 'Type', 'Message'], ...[...state.log].reverse().map(e => [nowStr(new Date(e.ts)), e.type, e.msg])];
+    download(new Blob(['﻿' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), `Journal_audit_Intelix_${stamp()}.csv`);
+  });
+  $('#btnLogClear').addEventListener('click', () => {
+    if (!confirm('Effacer le journal d\'audit ? Pensez à l\'exporter avant.')) return;
+    const n = state.log.length; state.log = []; log('warn', `Journal effacé (${n} entrée(s) supprimée(s)).`);
+  });
+
+  // En-tête
+  $('#btnTheme').addEventListener('click', () => {
+    const dark = document.documentElement.classList.toggle('dark');
+    try { localStorage.setItem('mi-theme', dark ? 'dark' : 'light'); } catch (e) {}
+  });
+  $('#btnDemo').addEventListener('click', loadDemo);
+  $('#btnReset').addEventListener('click', () => {
+    if (state.lines.length && !confirm('Démarrer une nouvelle session ? Fichiers, lignes et corrections seront effacés (le journal et les paramètres sont conservés).')) return;
+    state.files = []; state.lines = []; state.forced = new Set(); state.validated = null; rebuildRef();
+    Object.assign(state.ui, { filter: 'all', search: '', page: 1 });
+    log('warn', 'Nouvelle session démarrée : données de travail effacées.'); renderAll();
+  });
+
+  // Raccourci "/" pour la recherche
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); $('#search').focus(); }
+  });
+}
+
+function fmtSetting(v) { return typeof v === 'boolean' ? (v ? 'activé' : 'désactivé') : v === '\t' ? 'tabulation' : String(v); }
+
+async function onAction(e) {
+  const g = e.target.closest('[data-goto]');
+  if (g) {
+    Object.assign(state.ui, { view: g.dataset.gotoView, search: g.dataset.goto, filter: 'all', page: 1 });
+    renderToolbar(); renderTable(); icons(); save();
+    $('#dataTable').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  const b = e.target.closest('[data-act], [data-bulk]'); if (!b) return;
+  const act = b.dataset.act, l = b.dataset.id ? findLine(b.dataset.id) : null;
+  if (b.dataset.bulk === 'fixes') {
+    let n = 0;
+    for (const x of state.lines) { const fix = (A.issues.get(x.id) || []).find(i => i.type === 'unknown' && i.fix); if (fix) { log('edit', `${x.src} : correction automatique « ${x.code} » → « ${fix.fix.code} ».`); x.code = fix.fix.code; x.ack = {}; x.edited = true; n++; } }
+    toast(`${n} référence(s) corrigée(s). Vérifiez les quantités associées.`, 'success');
+  } else if (b.dataset.bulk === 'dups') {
+    const ids = state.lines.filter(x => (A.issues.get(x.id) || []).some(i => i.type === 'dup' && !i.acked)).map(x => x.id);
+    if (!confirm(`Supprimer ${ids.length} doublon(s) probable(s) ? La première occurrence de chaque saisie est conservée.`)) return;
+    ids.forEach(id => { const x = findLine(id); log('edit', `${x.src} : doublon supprimé (article ${x.code}, quantité ${fmt(x.qty)}).`); deleteLine(id, true); });
+    toast(`${ids.length} doublon(s) supprimé(s).`, 'success');
+  } else if (act === 'fix' && l) {
+    log('edit', `${l.src} : référence corrigée « ${l.code} » → « ${b.dataset.code} » (suggestion acceptée).`);
+    l.code = b.dataset.code; l.ack = {}; l.edited = true;
+  } else if (act === 'ack' && l) {
+    l.ack[b.dataset.type] = true;
+    const iss = (A.issues.get(l.id) || []).find(i => i.ack === b.dataset.type);
+    log('success', `${l.src} : anomalie vérifiée et conservée — ${iss ? iss.msg : b.dataset.type}`);
+  } else if (act === 'unack' && l) {
+    delete l.ack[b.dataset.type]; log('warn', `${l.src} : validation manuelle annulée (${b.dataset.type}).`);
+  } else if (act === 'force') {
+    const c = A.cumuls.get(b.dataset.code);
+    const reason = prompt(`Forcer le dépassement de seuil pour ${b.dataset.code} (${fmt(c?.total)} vs ${fmt(c?.seuil)}) ?\nIndiquez un motif (obligatoire, tracé dans le journal) :`);
+    if (!reason || !reason.trim()) { if (reason !== null) toast('Motif obligatoire pour forcer un seuil.', 'warn'); return; }
+    state.forced.add(b.dataset.code);
+    log('warn', `Dépassement de seuil forcé pour ${b.dataset.code} : cumul ${fmt(c?.total)} vs seuil ${fmt(c?.seuil)} — motif : ${reason.trim()}.`);
+  } else if (act === 'unforce') {
+    state.forced.delete(b.dataset.code); log('info', `Forçage du seuil annulé pour ${b.dataset.code}.`);
+  } else if (act === 'del' && l) {
+    deleteLine(l.id);
+  } else if (act === 'copyline' && l) {
+    const ok = await copyText(`${l.code}\t${fmtInput(l.qty)}`);
+    toast(ok ? `Copié : ${l.code} ⇥ ${fmtInput(l.qty)}` : 'Copie impossible.', ok ? 'success' : 'error'); return;
+  } else if (act === 'copytext') {
+    const ok = await copyText(b.dataset.text);
+    toast(ok ? `Copié : ${b.dataset.text}` : 'Copie impossible.', ok ? 'success' : 'error'); return;
+  } else return;
+  renderAll();
+}
+
+async function handleFiles(list) {
+  const files = [...list]; if (!files.length) return;
+  for (const file of files) {
+    try {
+      const sheets = await readFile(file);
+      if (!Object.values(sheets).some(r => r.length)) throw new Error('fichier vide');
+      addFile(file.name, sheets);
+    } catch (err) {
+      log('error', `Impossible de lire « ${file.name} » : ${err.message}`);
+      toast(`Lecture impossible : ${file.name} — ${err.message}`, 'error');
+    }
+  }
+  renderAll();
+  const s = A.stats;
+  toast(`${files.length} fichier(s) traité(s) — ${s.blocking ? `${s.blocking} erreur(s) bloquante(s) détectée(s)` : 'aucune erreur bloquante'}.`, s.blocking ? 'warn' : 'success');
+}
+
+/* ---------------------------- Jeu de démonstration ---------------------------- */
+function loadDemo() {
+  if (state.lines.length && !confirm('Remplacer les données actuelles par le jeu de démonstration ?')) return;
+  state.files = []; state.lines = []; state.forced = new Set(); state.validated = null;
+  const ref = [['Code article', 'Désignation', 'Unité', 'Seuil max'],
+    ['100245', 'Vis inox M6x20 (boîte 100)', 'BTE', 50], ['100254', 'Écrou frein M6 (sachet 50)', 'SAC', 60],
+    ['100310', 'Gants nitrile taille L', 'BTE', 40], ['100318', 'Gants nitrile taille M', 'BTE', 40],
+    ['200110', 'Papier A4 80 g (ramette)', 'RAM', 120], ['200125', 'Toner noir HP 59A', 'U', 10],
+    ['300050', 'Câble RJ45 Cat6 3 m', 'U', 80], ['300051', 'Câble RJ45 Cat6 5 m', 'U', 80],
+    ['400900', 'Désinfectant surfaces 5 L', 'BID', 25], ['401020', 'Essuie-mains pliés (colis)', 'COL', 30],
+    ['512000', 'Ruban adhésif 50 mm', 'RLX', 100], ['000785', 'Étiquettes thermiques 100x150', 'RLX', '']];
+  const o = [['N° commande', 'Date', 'Code article', 'Désignation', 'Quantité'],
+    ['CMD-4201', '14/10/2026', 100245, 'Vis inox M6x20', 12], ['CMD-4201', '14/10/2026', 100254, 'Écrou frein M6', 10],
+    ['CMD-4202', '14/10/2026', 100245, 'Vis inox M6x20', 15], ['CMD-4202', '14/10/2026', 200110, 'Papier A4', 40],
+    ['CMD-4203', '14/10/2026', 200110, 'Papier A4', 35], ['CMD-4203', '14/10/2026', 200125, 'Toner HP 59A', 4],
+    ['CMD-4204', '14/10/2026', 100524, 'Écrou frein M6', 8], ['CMD-4204', '14/10/2026', 300050, 'Câble RJ45 3m', 20],
+    ['CMD-4205', '15/10/2026', 300050, 'Câble RJ45 3m', 18], ['CMD-4205', '15/10/2026', 300050, 'Câble RJ45 3m', 200],
+    ['CMD-4206', '15/10/2026', 300050, 'Câble RJ45 3m', 22], ['CMD-4206', '15/10/2026', 400900, 'Désinfectant 5L', 6],
+    ['CMD-4207', '15/10/2026', 400900, 'Désinfectant 5L', 6], ['CMD-4207', '15/10/2026', 400900, 'Désinfectant 5L', 6],
+    ['CMD-4208', '15/10/2026', 401020, 'Essuie-mains', 12], ['CMD-4208', '15/10/2026', 200125, 'Ruban adhésif 50mm', 6],
+    ['CMD-4209', '15/10/2026', 785, 'Étiquettes thermiques', 30], ['CMD-4209', '15/10/2026', 512000, 'Ruban adhésif', 24],
+    ['CMD-4210', '15/10/2026', 999999, 'Article inconnu', 5], ['CMD-4210', '15/10/2026', 200110, 'Papier A4', '4O'],
+    ['CMD-4211', '15/10/2026', 100318, 'Gants nitrile M', 15], ['CMD-4211', '15/10/2026', 100310, 'Gants nitrile L', -3],
+    ['CMD-4212', '15/10/2026', 200110, 'Papier A4', 50], ['CMD-4212', '15/10/2026', 300051, 'Câble RJ45 5m', 30]];
+  addFile('Referentiel_Articles_DEMO.xlsx', { Articles: ref });
+  addFile('Commandes_Semaine42_DEMO.xlsx', { Commandes: o });
+  Object.assign(state.ui, { view: 'lines', filter: 'all', search: '', page: 1 });
+  log('info', 'Jeu de démonstration chargé (inversion de chiffres, doublon, saisie aberrante, seuils dépassés, référence inconnue, quantité invalide…).');
+  renderAll();
+  toast('Démo chargée : corrigez les anomalies signalées en rouge puis exportez.', 'info');
+}
+
+/* ---------------------------- Initialisation ---------------------------- */
+(function init() {
+  const restored = load();
+  bind();
+  renderLog();
+  renderAll();
+  if (restored && state.lines.length) toast(`Session précédente restaurée (${state.lines.length} ligne(s)).`, 'info');
+  else if (!state.log.length) log('info', 'Application démarrée. Importez vos fichiers ou chargez la démo.');
+  if (!window.XLSX) toast('SheetJS non chargé : seuls les fichiers CSV peuvent être lus (vérifiez la connexion).', 'warn');
+})();
+</script>
+</body>
+</html>
